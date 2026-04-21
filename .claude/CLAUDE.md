@@ -7,7 +7,7 @@
 **MVP scope**:
 - IN: Project + client CRUD, drawing tracker (8 types) with WhatsApp approval flow, site stages with exact 7-category checklist hierarchy, site notes with offline photo capture → WhatsApp to architect, client progress view (stage cards showing current stage name + %), basic invoicing (manual create + send via WhatsApp)
 - OUT: Razorpay integration, bank SMS parsing, legal approvals tracker (RERA/Fire NOC), GST auto-calculation, retainage tracking, multi-tenancy billing, Hindi voice transcription, one-click phase auto-invoice, change orders, labour attendance
-**Status**: Active development — Phase 0 (bootstrap + shell) building now
+**Status**: MVP COMPLETE (2026-04-20) — All 8 phases built and TypeScript-clean. Ready for pilot testing.
 
 ## Stack
 
@@ -374,11 +374,62 @@ Site notes work fully offline:
 - Test location: `src/__tests__/` (to be set up after Phase 1)
 - Not set up yet — add after MVP phases are running
 
+## Token-Efficient Codebase Lookup — Decision Tree
+
+Use this hierarchy. Stop at the first tier that answers the question. Never skip to a lower tier without exhausting the one above it.
+
+### Tier 0 — Already in context (0 tokens)
+CLAUDE.md (this file) + `memory/project_context.md` load automatically. They contain:
+- All API routes and page paths
+- All phase definitions (0–12)
+- Stack, auth flow, key invariants
+- Seeded demo data IDs
+**Use for:** "Where is the invoice API?", "What's the auth flow?", "What phase is next?"
+
+### Tier 1 — agent_docs files (cheap — one Read, ~2–5KB)
+Pre-written reference docs that answer broad questions without reading source:
+| File | Answers |
+|------|---------|
+| `agent_docs/architecture.md` | All routes, pages, file map, request flows, invariants |
+| `agent_docs/roadmap.md` | Phase steps, future DB schemas, files to create |
+| `agent_docs/database.md` | All table schemas, columns, indexes |
+| `agent_docs/api.md` | Request/response shapes for every endpoint |
+| `agent_docs/auth.md` | JWT structure, middleware, session flow |
+| `agent_docs/gotchas.md` | Non-obvious decisions, past bugs, workarounds |
+**Use for:** "What does the invoices table look like?", "What does the sync endpoint return?"
+
+### Tier 2 — Code Graph MCP (fast, targeted — ~50–200 tokens per call)
+Graph is built: 71 nodes, 309 edges, 26 files (last built 2026-04-20).
+**Known limitation:** `list_communities` and `list_flows` return 0 results — Next.js file-system routing is implicit, so no auto-clusters. Use function-level queries only.
+
+| Question type | Tool to use |
+|---------------|-------------|
+| "What calls function X?" | `query_graph_tool(pattern="callers_of", target="X")` |
+| "What does function X call?" | `query_graph_tool(pattern="callees_of", target="X")` |
+| "What files import module Y?" | `query_graph_tool(pattern="importers_of", target="Y")` |
+| "Find function named like Z" | `semantic_search_nodes_tool(query="Z", kind="Function")` |
+| "What breaks if I change file F?" | `get_impact_radius_tool(changed_files=["F"], detail_level="minimal")` |
+| "What changed vs last commit?" | `detect_changes_tool(detail_level="minimal")` |
+| "Starting any non-trivial task" | `get_minimal_context_tool(task="...", repo_root="/Users/abhinavmittal/manage /sathi")` |
+
+Always pass `repo_root="/Users/abhinavmittal/manage /sathi"` (note the space).
+Always use `detail_level="minimal"` unless the result is insufficient.
+
+**Rebuild graph after adding new files:**
+Call `build_or_update_graph_tool(full_rebuild=False, repo_root="/Users/abhinavmittal/manage /sathi")`.
+Full rebuild: set `full_rebuild=True`.
+
+### Tier 3 — Direct file Read (expensive — use only for implementation details)
+Only read a file when you need: exact line numbers, string literals, component JSX, specific function body. Use graph (Tier 2) to identify *which* file first, then read only that file.
+
+---
+
 ## Context Files — Read On Demand
 
 | File | Read when... |
 |------|-------------|
 | `agent_docs/architecture.md` | System design, new modules, major refactors |
+| `agent_docs/roadmap.md` | Any phase work — full phase definitions 0–12 with step-by-step instructions |
 | `agent_docs/database.md` | Models, migrations, queries |
 | `agent_docs/api.md` | Any endpoint work |
 | `agent_docs/auth.md` | Auth, sessions, tokens |
@@ -386,16 +437,29 @@ Site notes work fully offline:
 
 ## Build Phases
 
-| Phase | What | Verify |
-|-------|------|--------|
-| 0 | Config + install + UI shell + layout + dashboard | `npm run dev` → styled dashboard with nav |
-| 1 | Auth (login/logout) + client CRUD + project CRUD | Login → create client → create project |
-| 2 | Drawing tracker (8 types, upload, status) | Upload drawing → submit → approve/revise → version++ |
-| 3 | Site stages with checklist hierarchy (all 31 nodes) | Accordion checklist → check stages → progress bars update |
-| 4 | Site notes with offline + photo + WhatsApp | Airplane mode → capture → online → syncs → WhatsApp received |
-| 5 | Drawing approval WhatsApp flow | Send for Approval → client WhatsApp → reply Approve → status updates |
-| 6 | Progress view (stage cards + share link) | Stage cards show correct stage name → share link works in incognito |
-| 7 | Invoicing (manual create + send via WhatsApp) | Create invoice → send WhatsApp → record payment → status = Paid |
+| Phase | What | Status | Verify |
+|-------|------|--------|--------|
+| 0 | Config + install + UI shell + layout + dashboard | ✓ DONE | `npm run dev` → styled dashboard with nav |
+| 1 | Auth (login/logout) + client CRUD + project CRUD | ✓ DONE | Login → create client → create project |
+| 2 | Drawing tracker (8 types, upload, status) | ✓ DONE | Upload drawing → submit → approve/revise → version++ |
+| 3 | Site stages with checklist hierarchy (all 31 nodes) | ✓ DONE | Accordion checklist → check stages → progress bars update |
+| 4 | Site notes with offline + photo + WhatsApp | ✓ DONE | Airplane mode → capture → online → syncs → WhatsApp received |
+| 5 | Drawing approval WhatsApp flow | ✓ DONE | Send for Approval → client WhatsApp → reply Approve → status updates |
+| 6 | Progress view (stage cards + share link) | ✓ DONE | Stage cards show correct stage name → share link works in incognito |
+| 7 | Invoicing (manual create + send via WhatsApp) | ✓ DONE | Create invoice → send WhatsApp → record payment → status = Paid |
+| 8 | Deployment + pilot infra | ⏳ NEXT | R2 bucket → GitHub → Vercel → Oracle VM → n8n → WhatsApp QR → end-to-end test |
+| 9 | One-click auto-invoice + Razorpay payment links | 🔲 POST-PILOT | Phase complete → invoice auto-generated → client pays via Razorpay link in WhatsApp |
+| 10 | Labour attendance | 🔲 POST-PILOT | Supervisor marks attendance → weekly WhatsApp summary to architect |
+| 11 | Legal approvals tracker (RERA, Fire NOC) | 🔲 POST-PILOT | Deadline added → 7-day WhatsApp reminder fires |
+| 12 | Multi-tenancy + SaaS billing (Stripe) | 🔲 POST-PILOT | Firm signs up → subscribes → feature-gated by plan |
+
+**Phases 0–7: COMPLETE. Phase 8: NEXT. Phases 9–12: Post-pilot.**
+
+**For full step-by-step phase instructions → read `agent_docs/roadmap.md`**
+
+MVP scope boundary:
+- IN (phases 0–7): Project/client CRUD, drawing tracker with WhatsApp approval, site stages checklist, site notes offline+photo, client progress view, basic invoicing
+- OUT until post-pilot: auto-invoice, Razorpay, labour, legal approvals, multi-tenancy, Stripe, GST auto-calc, change orders, Hindi voice
 
 ## Project-Specific Rules
 

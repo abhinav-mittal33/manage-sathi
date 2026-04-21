@@ -25,6 +25,7 @@ interface ManageSathiDB extends DBSchema {
   'photos': {
     key: string;
     value: {
+      key: string;
       blob: Blob;
       mimeType: string;
       capturedAt: string;
@@ -89,7 +90,7 @@ export async function savePhotoOffline(
   mimeType: string
 ): Promise<void> {
   const db = await getOfflineDB();
-  await db.put('photos', { blob, mimeType, capturedAt: new Date().toISOString() } as ManageSathiDB['photos']['value'] & { key: string });
+  await db.put('photos', { key, blob, mimeType, capturedAt: new Date().toISOString() });
 }
 
 export async function getPendingNotes(): Promise<ManageSathiDB['site-notes']['value'][]> {
