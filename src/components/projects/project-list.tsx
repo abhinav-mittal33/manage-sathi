@@ -1,7 +1,9 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { FolderOpen } from 'lucide-react';
+import { FolderOpen, PlusCircle } from 'lucide-react';
+import Link from 'next/link';
+import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { ProjectCard } from './project-card';
 import type { ProjectWithClient } from '@/lib/services/project.service';
@@ -53,15 +55,19 @@ export function ProjectList({ clientId }: ProjectListProps) {
   }
 
   if (projects.length === 0) {
+    const newProjectHref = `/projects/new${clientId ? `?clientId=${clientId}` : ''}`;
     return (
       <div className="flex flex-col items-center justify-center gap-3 py-14 text-center">
         <div className="w-12 h-12 rounded-full bg-sand/40 flex items-center justify-center">
           <FolderOpen className="w-6 h-6 text-sage" />
         </div>
         <p className="text-charcoal font-medium">No projects yet</p>
-        <p className="text-sm text-muted-foreground">
-          Create a project via the Clients page
-        </p>
+        <Link href={newProjectHref}>
+          <Button size="sm" className="bg-sage hover:bg-sage/90 text-white gap-1.5 border-0">
+            <PlusCircle className="w-4 h-4" />
+            New Project
+          </Button>
+        </Link>
       </div>
     );
   }

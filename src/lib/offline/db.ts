@@ -98,6 +98,15 @@ export async function getPendingNotes(): Promise<ManageSathiDB['site-notes']['va
   return db.getAllFromIndex('site-notes', 'by-sync-status', 'pending');
 }
 
+export async function getUnsyncedNotes(): Promise<ManageSathiDB['site-notes']['value'][]> {
+  const db = await getOfflineDB();
+  const [pending, errored] = await Promise.all([
+    db.getAllFromIndex('site-notes', 'by-sync-status', 'pending'),
+    db.getAllFromIndex('site-notes', 'by-sync-status', 'error'),
+  ]);
+  return [...pending, ...errored];
+}
+
 export async function markNoteSynced(localId: string, serverId: string): Promise<void> {
   const db = await getOfflineDB();
   const note = await db.get('site-notes', localId);
@@ -116,6 +125,11 @@ export async function markNoteSyncError(localId: string, error: string): Promise
     note.syncError = error;
     await db.put('site-notes', note);
   }
+}
+
+export async function deleteNoteFromIDB(localId: string): Promise<void> {
+  const db = await getOfflineDB();
+  await db.delete('site-notes', localId);
 }
 
 export async function getPendingCount(): Promise<number> {

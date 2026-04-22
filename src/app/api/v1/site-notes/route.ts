@@ -10,16 +10,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     const auth = await requireAuth();
     const params = request.nextUrl.searchParams;
 
-    const projectId = params.get('projectId');
-    if (!projectId) {
-      return NextResponse.json(
-        {
-          success: false,
-          error: { code: 'VALIDATION_ERROR', message: 'projectId query parameter is required' },
-        } satisfies ApiResponse,
-        { status: 400 }
-      );
-    }
+    const projectId = params.get('projectId') ?? undefined;
 
     const rawLimit = parseInt(params.get('limit') ?? '20', 10);
     const limit = isNaN(rawLimit) || rawLimit < 1 ? 20 : Math.min(rawLimit, 50);

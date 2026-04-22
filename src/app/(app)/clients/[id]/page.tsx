@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { ArrowLeft, Pencil, Trash2, Phone, Mail, MapPin, FolderOpen } from 'lucide-react';
+import { ArrowLeft, Pencil, Trash2, Phone, Mail, MapPin, FolderOpen, PlusCircle } from 'lucide-react';
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
@@ -173,16 +173,26 @@ export default function ClientDetailPage({ params }: ClientDetailPageProps) {
         </CardContent>
       </Card>
 
-      {/* Projects shortcut */}
-      <Link href={`/projects?clientId=${id}`}>
-        <Button
-          variant="outline"
-          className="w-full min-h-[44px] border-sand hover:border-sage hover:bg-sage/10 gap-2 text-charcoal"
-        >
-          <FolderOpen className="w-4 h-4 text-sage" />
-          View Projects for {client.name}
-        </Button>
-      </Link>
+      {/* Projects shortcuts */}
+      <div className="flex flex-col gap-2">
+        <Link href={`/projects/new?clientId=${id}`}>
+          <Button
+            className="w-full min-h-[44px] bg-sage hover:bg-sage/90 text-white gap-2 border-0"
+          >
+            <PlusCircle className="w-4 h-4" />
+            New Project for {client.name}
+          </Button>
+        </Link>
+        <Link href={`/projects?clientId=${id}`}>
+          <Button
+            variant="outline"
+            className="w-full min-h-[44px] border-sand hover:border-sage hover:bg-sage/10 gap-2 text-charcoal"
+          >
+            <FolderOpen className="w-4 h-4 text-sage" />
+            View Projects for {client.name}
+          </Button>
+        </Link>
+      </div>
     </div>
   );
 }

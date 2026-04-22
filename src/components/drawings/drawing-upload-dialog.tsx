@@ -32,7 +32,7 @@ type UploadStep = 'idle' | 'creating' | 'presigning' | 'uploading' | 'submitting
 const STEP_LABELS: Record<UploadStep, string> = {
   idle: '',
   creating: 'Creating drawing record…',
-  presigning: 'Preparing upload…',
+  presigning: 'Uploading file…',
   uploading: 'Uploading file…',
   submitting: 'Submitting for approval…',
   done: 'Done',
@@ -98,30 +98,20 @@ export function DrawingUploadDialog({
         if (!activeDrawingId) throw new Error('Drawing record created but no ID returned.');
       }
 
-      // Step 2: Get presigned upload URL
-      setStep('presigning');
-      const presignRes = await fetch(
-        `/api/v1/projects/${projectId}/drawings/${activeDrawingId}/upload`,
-        {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ fileName: selectedFile.name, contentType: selectedFile.type }),
-        }
-      );
-      if (!presignRes.ok) {
-        const body = await presignRes.json().catch(() => ({}));
-        throw new Error(body?.error?.message ?? 'Failed to get upload URL.');
-      }
-      const { uploadUrl, fileUrl } = await presignRes.json();
-
-      // Step 3: Upload file directly to R2
+      // Step 2 + 3: Upload file to server (server proxies to R2)
       setStep('uploading');
-      const uploadRes = await fetch(uploadUrl, {
-        method: 'PUT',
-        body: selectedFile,
-        headers: { 'Content-Type': selectedFile.type },
-      });
-      if (!uploadRes.ok) throw new Error('File upload to storage failed.');
+      const formData = new FormData();
+      formData.append('file', selectedFile);
+      const uploadRes = await fetch(
+        `/api/v1/projects/${projectId}/drawings/${activeDrawingId}/upload`,
+        { method: 'POST', body: formData }
+      );
+      if (!uploadRes.ok) {
+        const body = await uploadRes.json().catch(() => ({}));
+        throw new Error(body?.error?.message ?? 'File upload failed.');
+      }
+      const uploadData = await uploadRes.json();
+      const fileUrl = uploadData.data?.fileUrl;
 
       // Step 4: Submit drawing with file URL and notes
       setStep('submitting');

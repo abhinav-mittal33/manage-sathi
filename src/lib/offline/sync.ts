@@ -15,37 +15,34 @@ export async function syncPendingNotes(): Promise<{ synced: number; failed: numb
         const db = await getOfflineDB();
         const photo = await db.get('photos', note.photoLocalKey);
         if (photo) {
-          // Get presigned upload URL
-          const presignRes = await fetch('/api/v1/site-notes/upload-url', {
+          const formData = new FormData();
+          formData.append('photo', new File([photo.blob], 'photo.jpg', { type: photo.mimeType }));
+          const uploadRes = await fetch('/api/v1/site-notes/upload-photo', {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ mimeType: photo.mimeType }),
+            body: formData,
           });
-          if (presignRes.ok) {
-            const { uploadUrl, publicUrl } = await presignRes.json();
-            await fetch(uploadUrl, {
-              method: 'PUT',
-              headers: { 'Content-Type': photo.mimeType },
-              body: photo.blob,
-            });
-            photoUrl = publicUrl;
+          if (uploadRes.ok) {
+            const uploadData = await uploadRes.json();
+            photoUrl = uploadData.data?.fileUrl ?? null;
           }
         }
       }
 
+      const payload: Record<string, unknown> = {
+        localId: note.localId,
+        projectId: note.projectId,
+        capturedAt: note.capturedAt,
+      };
+      if (note.noteText) payload.noteText = note.noteText;
+      if (photoUrl) payload.photoUrl = photoUrl;
+      if (note.photoLocalKey) payload.photoLocalKey = note.photoLocalKey;
+      if (note.latitude != null) payload.latitude = note.latitude;
+      if (note.longitude != null) payload.longitude = note.longitude;
+
       const res = await fetch('/api/v1/site-notes/sync', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify([{
-          localId: note.localId,
-          projectId: note.projectId,
-          noteText: note.noteText,
-          photoUrl,
-          photoLocalKey: note.photoLocalKey,
-          latitude: note.latitude,
-          longitude: note.longitude,
-          capturedAt: note.capturedAt,
-        }]),
+        body: JSON.stringify([payload]),
       });
 
       if (res.ok) {

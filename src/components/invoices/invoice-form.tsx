@@ -38,8 +38,8 @@ export function InvoiceForm({ projectId, clientId, projectName, onSuccess }: Inv
         const res = await fetch('/api/v1/invoices/next-number');
         if (!res.ok) return;
         const data = await res.json();
-        if (data.success && data.data?.invoiceNumber) {
-          setInvoiceNumber(data.data.invoiceNumber);
+        if (data.success && data.data?.nextNumber) {
+          setInvoiceNumber(String(data.data.nextNumber));
         }
       } catch {
         // Non-critical — display empty, user can proceed
@@ -78,9 +78,9 @@ export function InvoiceForm({ projectId, clientId, projectName, onSuccess }: Inv
           projectId,
           clientId,
           description: description.trim(),
-          amount,
-          taxPercent,
-          dueDate: dueDate || null,
+          amount: parseFloat(amount),
+          taxPercent: parseFloat(taxPercent) || 0,
+          dueDate: dueDate || undefined,
         }),
       });
 

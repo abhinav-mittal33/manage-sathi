@@ -120,7 +120,7 @@ export async function syncNotes(
 
 export async function listNotes(
   firmId: string,
-  filters: { projectId: string; limit: number; cursor?: string }
+  filters: { projectId?: string; limit: number; cursor?: string }
 ): Promise<{ notes: SiteNoteRow[]; nextCursor: string | null }> {
   const rows = await listSiteNotes(firmId, filters.projectId, filters.limit, filters.cursor);
 

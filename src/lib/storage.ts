@@ -1,4 +1,4 @@
-import { S3Client, PutObjectCommand, GetObjectCommand } from '@aws-sdk/client-s3';
+import { S3Client, PutObjectCommand, GetObjectCommand, DeleteObjectCommand } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 
 const r2Client = new S3Client({
@@ -33,6 +33,17 @@ export async function getPresignedDownloadUrl(key: string, expiresIn = 60): Prom
 
 export function getPublicUrl(key: string): string {
   return `${PUBLIC_URL}/${key}`;
+}
+
+export async function deleteFromR2(key: string): Promise<void> {
+  const command = new DeleteObjectCommand({ Bucket: BUCKET, Key: key });
+  await r2Client.send(command);
+}
+
+export function keyFromPublicUrl(photoUrl: string): string | null {
+  const base = PUBLIC_URL;
+  if (!base || !photoUrl.startsWith(base + '/')) return null;
+  return photoUrl.slice(base.length + 1);
 }
 
 export function generateFileKey(
