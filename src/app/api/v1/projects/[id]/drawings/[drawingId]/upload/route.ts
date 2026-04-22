@@ -15,8 +15,6 @@ const r2 = new S3Client({
   },
 });
 
-export const config = { api: { bodyParser: false } };
-
 // POST /api/v1/projects/[id]/drawings/[drawingId]/upload
 // Accepts multipart form data with 'file' field.
 // Uploads directly to R2 server-side — no CORS presign dance needed.
