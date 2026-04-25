@@ -94,7 +94,9 @@ export function ProjectForm({ clients, defaultValues, projectId, onSuccess }: Pr
           onValueChange={(v) => { if (v) setValue('clientId', v, { shouldValidate: true }); }}
         >
           <SelectTrigger>
-            <SelectValue placeholder="Select client" />
+            <SelectValue placeholder="Select client">
+              {clientId ? (clients.find((c) => c.id === clientId)?.name ?? 'Select client') : undefined}
+            </SelectValue>
           </SelectTrigger>
           <SelectContent>
             {clients.map((c) => (

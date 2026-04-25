@@ -3,7 +3,7 @@
 import { useEffect, useState, useCallback } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
-import { Plus, Loader2, BookOpen, Trash2, CheckSquare, X, RotateCcw, Trash } from 'lucide-react';
+import { Plus, Loader2, BookOpen, Trash2, CheckSquare, X, RotateCcw, Trash, Camera, Lock, MessageSquareDiff } from 'lucide-react';
 import { PageHeader } from '@/components/layout/page-header';
 import { SyncStatusIndicator } from '@/components/site-notes/sync-status-indicator';
 import { NoteCard, type NoteDisplay } from '@/components/site-notes/note-card';
@@ -11,9 +11,15 @@ import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { getUnsyncedNotes, deleteNoteFromIDB } from '@/lib/offline/db';
 
+type NoteType = 'site_visit' | 'personal' | 'approval_request';
+type ActiveTab = 'all' | NoteType;
+type Tab = ActiveTab | 'deleted';
+
 interface ApiNote {
   id: string;
   localId: string;
+  noteType?: NoteType;
+  approvalStatus?: string | null;
   noteText: string | null;
   photoUrl: string | null;
   capturedAt: string;
@@ -27,33 +33,39 @@ interface ApiResponse {
 }
 
 const PAGE_SIZE = 20;
-type Tab = 'active' | 'deleted';
+
+const TAB_CONFIG: { id: Tab; label: string; icon?: React.ElementType }[] = [
+  { id: 'all',              label: 'All' },
+  { id: 'site_visit',       label: 'Site Visits',  icon: Camera },
+  { id: 'personal',         label: 'My Notes',     icon: Lock },
+  { id: 'approval_request', label: 'Approvals',    icon: MessageSquareDiff },
+  { id: 'deleted',          label: 'Deleted',      icon: Trash },
+];
 
 export default function SiteDiaryPage() {
-  const [tab, setTab] = useState<Tab>('active');
+  const [tab, setTab] = useState<Tab>('all');
 
-  // Active tab state
   const [notes, setNotes] = useState<NoteDisplay[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
   const [nextCursor, setNextCursor] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  // Deleted tab state
   const [deletedNotes, setDeletedNotes] = useState<ApiNote[]>([]);
   const [loadingDeleted, setLoadingDeleted] = useState(false);
   const [deletedError, setDeletedError] = useState<string | null>(null);
 
-  // Selection (active tab only)
   const [selectionMode, setSelectionMode] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [deleting, setDeleting] = useState(false);
 
-  // Lightbox
   const [lightboxUrl, setLightboxUrl] = useState<string | null>(null);
 
-  const fetchPage = useCallback(async (cursor?: string): Promise<ApiResponse> => {
+  const isActiveTab = tab !== 'deleted';
+
+  const fetchPage = useCallback(async (noteType: ActiveTab, cursor?: string): Promise<ApiResponse> => {
     const params = new URLSearchParams({ limit: String(PAGE_SIZE) });
+    if (noteType !== 'all') params.set('noteType', noteType);
     if (cursor) params.set('cursor', cursor);
     const res = await fetch(`/api/v1/site-notes?${params.toString()}`);
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
@@ -65,23 +77,22 @@ export default function SiteDiaryPage() {
       const unsynced = await getUnsyncedNotes();
       return unsynced.map((n) => ({
         localId: n.localId,
+        noteType: n.noteType ?? 'personal',
         noteText: n.noteText,
         photoUrl: null,
         capturedAt: n.capturedAt,
         syncStatus: n.syncStatus as NoteDisplay['syncStatus'],
       }));
-    } catch {
-      return [];
-    }
+    } catch { return []; }
   }, []);
 
-  const loadNotes = useCallback(async () => {
+  const loadNotes = useCallback(async (activeTab: ActiveTab) => {
     setLoading(true);
     setError(null);
     try {
       const [offlineNotes, serverData] = await Promise.all([
-        loadOfflinePending(),
-        fetchPage(),
+        activeTab === 'all' ? loadOfflinePending() : Promise.resolve([]),
+        fetchPage(activeTab),
       ]);
       const serverNotes = serverData.data.notes;
       const serverLocalIds = new Set(serverNotes.map((n) => n.localId));
@@ -89,6 +100,8 @@ export default function SiteDiaryPage() {
       const serverDisplayNotes: NoteDisplay[] = serverNotes.map((n) => ({
         id: n.id,
         localId: n.localId,
+        noteType: n.noteType ?? 'personal',
+        approvalStatus: n.approvalStatus as NoteDisplay['approvalStatus'],
         noteText: n.noteText,
         photoUrl: n.photoUrl,
         capturedAt: n.capturedAt,
@@ -98,7 +111,7 @@ export default function SiteDiaryPage() {
       setNotes([...uniqueOffline, ...serverDisplayNotes]);
       setNextCursor(serverData.data.nextCursor);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load site diary');
+      setError(err instanceof Error ? err.message : 'Failed to load');
     } finally {
       setLoading(false);
     }
@@ -119,69 +132,56 @@ export default function SiteDiaryPage() {
     }
   }, []);
 
-  useEffect(() => { loadNotes(); }, [loadNotes]);
-
   useEffect(() => {
-    if (tab === 'deleted') loadDeletedNotes();
-  }, [tab, loadDeletedNotes]);
+    if (tab === 'deleted') { loadDeletedNotes(); return; }
+    loadNotes(tab);
+  }, [tab, loadNotes, loadDeletedNotes]);
 
   async function handleLoadMore() {
-    if (!nextCursor || loadingMore) return;
+    if (!nextCursor || loadingMore || tab === 'deleted') return;
     setLoadingMore(true);
     try {
-      const data = await fetchPage(nextCursor);
+      const data = await fetchPage(tab as ActiveTab, nextCursor);
       const more: NoteDisplay[] = data.data.notes.map((n) => ({
-        id: n.id, localId: n.localId, noteText: n.noteText,
-        photoUrl: n.photoUrl, capturedAt: n.capturedAt,
-        syncStatus: 'synced' as const, projectName: n.project?.name,
+        id: n.id, localId: n.localId,
+        noteType: n.noteType ?? 'personal',
+        approvalStatus: n.approvalStatus as NoteDisplay['approvalStatus'],
+        noteText: n.noteText, photoUrl: n.photoUrl,
+        capturedAt: n.capturedAt, syncStatus: 'synced' as const,
+        projectName: n.project?.name,
       }));
       setNotes((prev) => [...prev, ...more]);
       setNextCursor(data.data.nextCursor);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load more');
-    } finally {
-      setLoadingMore(false);
-    }
+    } finally { setLoadingMore(false); }
   }
 
   function handleToggleSelect(localId: string, checked: boolean) {
-    setSelectedIds((prev) => {
-      const next = new Set(prev);
-      if (checked) next.add(localId); else next.delete(localId);
-      return next;
-    });
-  }
-
-  function handleSelectAll() {
-    setSelectedIds(selectedIds.size === notes.length ? new Set() : new Set(notes.map((n) => n.localId)));
+    setSelectedIds((prev) => { const next = new Set(prev); if (checked) next.add(localId); else next.delete(localId); return next; });
   }
 
   function exitSelectionMode() { setSelectionMode(false); setSelectedIds(new Set()); }
 
   async function handleDeleteSelected() {
     if (selectedIds.size === 0) return;
-    if (!confirm(`Delete ${selectedIds.size} note${selectedIds.size > 1 ? 's' : ''}? They'll be in Recently Deleted for 30 days.`)) return;
+    if (!confirm(`Delete ${selectedIds.size} note${selectedIds.size > 1 ? 's' : ''}? They'll be in Deleted for 30 days.`)) return;
     setDeleting(true);
     try {
       const toDelete = notes.filter((n) => selectedIds.has(n.localId));
       await Promise.all([
-        ...toDelete.filter((n) => n.id).map((n) =>
-          fetch(`/api/v1/site-notes/${n.id}`, { method: 'DELETE' })
-        ),
+        ...toDelete.filter((n) => n.id).map((n) => fetch(`/api/v1/site-notes/${n.id}`, { method: 'DELETE' })),
         ...toDelete.filter((n) => !n.id).map((n) => deleteNoteFromIDB(n.localId)),
       ]);
       exitSelectionMode();
-      await loadNotes();
-    } catch {
-      setError('Failed to delete some notes.');
-    } finally {
-      setDeleting(false);
-    }
+      if (tab !== 'deleted') await loadNotes(tab as ActiveTab);
+    } catch { setError('Failed to delete some notes.'); }
+    finally { setDeleting(false); }
   }
 
   async function handleRestore(id: string) {
     await fetch(`/api/v1/site-notes/${id}`, { method: 'PATCH' });
-    await Promise.all([loadDeletedNotes(), loadNotes()]);
+    await Promise.all([loadDeletedNotes(), loadNotes('all')]);
   }
 
   async function handlePermanentDelete(id: string) {
@@ -196,21 +196,11 @@ export default function SiteDiaryPage() {
     <>
       {/* Lightbox */}
       {lightboxUrl && (
-        <div
-          className="fixed inset-0 z-50 bg-black/90 flex items-center justify-center p-4"
-          onClick={() => setLightboxUrl(null)}
-        >
-          <button
-            className="absolute top-4 right-4 text-white/80 hover:text-white bg-black/40 rounded-full p-2"
-            onClick={() => setLightboxUrl(null)}
-            aria-label="Close"
-          >
+        <div className="fixed inset-0 z-50 bg-black/90 flex items-center justify-center p-4" onClick={() => setLightboxUrl(null)}>
+          <button className="absolute top-4 right-4 text-white/80 hover:text-white bg-black/40 rounded-full p-2" onClick={() => setLightboxUrl(null)} aria-label="Close">
             <X className="w-5 h-5" />
           </button>
-          <div
-            className="relative max-w-4xl max-h-[90vh] w-full h-full"
-            onClick={(e) => e.stopPropagation()}
-          >
+          <div className="relative max-w-4xl max-h-[90vh] w-full h-full" onClick={(e) => e.stopPropagation()}>
             <Image src={lightboxUrl} alt="Site photo full view" fill className="object-contain" sizes="100vw" />
           </div>
         </div>
@@ -222,7 +212,7 @@ export default function SiteDiaryPage() {
           description="All site notes across your projects"
           actions={
             <div className="flex items-center gap-2">
-              {tab === 'active' && !selectionMode && (
+              {isActiveTab && !selectionMode && (
                 <>
                   <Button size="sm" variant="outline" onClick={() => setSelectionMode(true)} className="gap-1.5 border-sand text-charcoal">
                     <CheckSquare className="w-3.5 h-3.5" />
@@ -236,9 +226,9 @@ export default function SiteDiaryPage() {
                   </Link>
                 </>
               )}
-              {tab === 'active' && selectionMode && (
+              {isActiveTab && selectionMode && (
                 <>
-                  <button onClick={handleSelectAll} className="text-sm text-sage font-medium hover:underline">
+                  <button onClick={() => setSelectedIds(allSelected ? new Set() : new Set(notes.map((n) => n.localId)))} className="text-sm text-sage font-medium hover:underline">
                     {allSelected ? 'Deselect all' : 'Select all'}
                   </button>
                   <Button size="sm" variant="destructive" disabled={selectedIds.size === 0 || deleting} onClick={handleDeleteSelected} className="gap-1.5">
@@ -256,24 +246,25 @@ export default function SiteDiaryPage() {
         />
 
         {/* Tabs */}
-        <div className="flex gap-1 border-b border-border">
-          {(['active', 'deleted'] as Tab[]).map((t) => (
+        <div className="flex gap-0.5 overflow-x-auto border-b border-border scrollbar-none">
+          {TAB_CONFIG.map(({ id, label, icon: Icon }) => (
             <button
-              key={t}
-              onClick={() => { setTab(t); if (selectionMode) exitSelectionMode(); }}
-              className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors -mb-px ${
-                tab === t
+              key={id}
+              onClick={() => { setTab(id); if (selectionMode) exitSelectionMode(); }}
+              className={`flex items-center gap-1.5 whitespace-nowrap px-3.5 py-2 text-sm font-medium border-b-2 transition-colors -mb-px ${
+                tab === id
                   ? 'border-sage text-sage'
                   : 'border-transparent text-muted-foreground hover:text-charcoal'
               }`}
             >
-              {t === 'active' ? 'Notes' : 'Recently Deleted'}
+              {Icon && <Icon className="w-3.5 h-3.5" />}
+              {label}
             </button>
           ))}
         </div>
 
         {/* Active notes */}
-        {tab === 'active' && (
+        {isActiveTab && (
           <>
             <SyncStatusIndicator />
             {loading ? (
@@ -285,8 +276,13 @@ export default function SiteDiaryPage() {
             ) : notes.length === 0 ? (
               <div className="flex flex-col items-center gap-3 py-12 text-center">
                 <BookOpen className="w-10 h-10 text-sand" />
-                <p className="text-sm text-muted-foreground">No site notes yet.</p>
-                <p className="text-xs text-muted-foreground">Start capturing notes on site to build your project diary.</p>
+                <p className="text-sm text-muted-foreground">No notes here yet.</p>
+                <Link href="/site-diary/new">
+                  <Button size="sm" className="bg-sage hover:bg-sage/90 text-white gap-1.5 mt-1">
+                    <Plus className="w-3.5 h-3.5" />
+                    Add Note
+                  </Button>
+                </Link>
               </div>
             ) : (
               <div className="space-y-3">
@@ -309,16 +305,12 @@ export default function SiteDiaryPage() {
           </>
         )}
 
-        {/* Recently Deleted */}
+        {/* Deleted */}
         {tab === 'deleted' && (
           <div className="space-y-3">
-            <p className="text-xs text-muted-foreground">
-              Notes here are permanently removed after 30 days. Photos are deleted from storage after 30 days.
-            </p>
+            <p className="text-xs text-muted-foreground">Notes here are permanently removed after 30 days.</p>
             {loadingDeleted ? (
-              <div className="space-y-3">
-                {Array.from({ length: 2 }).map((_, i) => <Skeleton key={i} className="h-28 w-full rounded-xl" />)}
-              </div>
+              <div className="space-y-3">{Array.from({ length: 2 }).map((_, i) => <Skeleton key={i} className="h-28 w-full rounded-xl" />)}</div>
             ) : deletedError ? (
               <p className="text-sm text-destructive">{deletedError}</p>
             ) : deletedNotes.length === 0 ? (

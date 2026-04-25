@@ -10,6 +10,72 @@
 
 ---
 
+## Session 2 Work (2026-04-24) — Complete Record
+
+### Local Dev WhatsApp Stack
+- **Docker Compose:** `/tmp/manage-sathi-local/docker-compose.yml`
+- Services: `waha` (port 3000), `n8n` (port 5678), `evo-postgres` (port 5433)
+- WAHA uses `platform: linux/amd64` (Rosetta on Apple Silicon — no ARM image)
+- WAHA session name MUST be `"default"` (Core tier limit)
+- WAHA env: `WAHA_API_KEY=manage-sathi-local-key`, `WAHA_DASHBOARD_USERNAME=admin`, `WAHA_DASHBOARD_PASSWORD=manage-sathi-pass`
+- Cloudflare tunnel: `cloudflared tunnel --url http://localhost:5678` → get HTTPS URL → set in `.env.local` for all N8N_*_WEBHOOK vars
+- n8n API key expires when container restarts — regenerate at `localhost:5678` → Settings → API
+
+### n8n Workflows (all active, localhost:5678)
+| ID | Name | Webhook path |
+|----|------|-------------|
+| QwVaeNnsut3FsiU4 | Site Note → WhatsApp | /webhook/site-note |
+| RIFm1mwlHVruLCsY | Invoice → WhatsApp | /webhook/invoice |
+| mrO4M5l24MTP4pBO | Drawing Approval → WhatsApp | /webhook/drawing-approval |
+| NaJbZqvyhcFZllun | site-visit-confirm | /webhook/site-visit |
+| vXXJ8FOOvI4Qpgts | approval-request | /webhook/approval-request |
+
+### n8n Workflow Node Version Rules (CRITICAL)
+- Webhook node MUST be `typeVersion: 2` — v1 crashes execution silently, empty data, no error captured
+- IF node MUST be `typeVersion: 2` — v1 conditions format incompatible with n8n 2.17.7
+- Data from webhook body: `$json.body.fieldName` NOT `$json.fieldName`
+- chatId format: `"91" + $json.body.clientPhone.replace(/\D/g,"").slice(-10) + "@c.us"`
+- HTTP Request params must have `"options": {}` field present
+
+### 3-Type Site Notes Redesign (fully implemented + db:push done)
+**Types:** `site_visit` (photo→client WhatsApp), `personal` (team-only, no WA), `approval_request` (text→client approval WA)
+
+**DB columns added to site_notes:** `note_type varchar(20) default 'personal'`, `approval_status varchar(20)`
+
+**Files changed:**
+- `src/db/schema.ts` — noteType, approvalStatus columns
+- `src/lib/validations/site-note.ts` — 3-type zod schema
+- `src/lib/dal/site-note.dal.ts` — noteType filter, approvalStatus on insert, findProjectWithClientForNote() joins clients
+- `src/lib/whatsapp.ts` — sendSiteVisitConfirmation(), sendApprovalRequest()
+- `src/lib/services/site-note.service.ts` — dispatchWhatsApp() helper routes by noteType
+- `src/app/api/v1/site-notes/route.ts` — ?noteType= filter
+- `src/lib/offline/db.ts` — IDB v1→v2, noteType field
+- `src/lib/offline/sync.ts` — noteType in sync payload
+- `src/components/site-notes/note-capture-form.tsx` — 3-card type selector UI
+- `src/components/site-notes/note-card.tsx` — type badges, approval status badges
+- `src/app/(app)/site-diary/page.tsx` — 5 tabs: All/Site Visits/My Notes/Approvals/Deleted
+
+**New env vars (add to .env.local):**
+```
+N8N_SITE_VISIT_WEBHOOK=http://localhost:5678/webhook/site-visit
+N8N_APPROVAL_WEBHOOK=http://localhost:5678/webhook/approval-request
+```
+
+### CSS Fix (globals.css)
+- **Problem:** Tailwind v4-style imports (`@import "shadcn/tailwind.css"`) + `oklch()` vars, but tailwind.config.ts uses `hsl(var(--...))` → all colors invalid → entire UI unstyled
+- **Fix:** Removed bad imports, rewrote all CSS vars as `H S% L%` triplets
+- `src/app/globals.css` — now clean Tailwind v3 format
+
+### Project Form Client UUID Bug (fixed)
+- shadcn SelectValue doesn't auto-show label for pre-set values → showed raw UUID
+- Fix: explicit children in SelectValue: `{clientId ? clients.find(c=>c.id===clientId)?.name : undefined}`
+- `src/components/projects/project-form.tsx`
+
+### Architect's WhatsApp ID
+`919784577736@c.us` — confirmed receives messages
+
+---
+
 ## Project-Specific Gotchas
 
 **Stage weight total is 92.5, not 100**
@@ -105,3 +171,52 @@
 - Cause: Token decoded but exp claim not checked
 - Fix: jose `jwtVerify` checks exp automatically — ensure it's called, not just `decodeJwt`
 - File: `src/middleware.ts`
+
+---
+
+## Phase 8 Deployment — Fallback (E2.1.Micro, 1GB RAM)
+
+**Primary plan (roadmap):** Oracle A1 Ampere (4 OCPU, 24GB RAM) + Docker.
+**Use this only if A1 stays unavailable and you need to deploy on E2.1.Micro.**
+
+**Step 1 — Add swap (do this first, required):**
+```bash
+sudo fallocate -l 2G /swapfile
+sudo chmod 600 /swapfile
+sudo mkswap /swapfile
+sudo swapon /swapfile
+echo '/swapfile none swap sw 0 0' | sudo tee -a /etc/fstab
+```
+
+**Step 2 — Install Node.js 20:**
+```bash
+curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
+sudo apt-get install -y nodejs
+```
+
+**Step 3 — Run n8n directly (no Docker):**
+```bash
+sudo npm install -g n8n
+n8n start --tunnel &   # or use pm2
+```
+
+**Step 4 — Run Evolution API directly (no Docker):**
+```bash
+git clone https://github.com/EvolutionAPI/evolution-api.git
+cd evolution-api
+cp .env.example .env   # fill in values
+npm install
+npm run build
+npm start &            # or use pm2
+```
+
+**Step 5 — Use pm2 to keep both alive:**
+```bash
+sudo npm install -g pm2
+pm2 start n8n --name n8n
+pm2 start "npm start" --name evolution-api --cwd /home/ubuntu/evolution-api
+pm2 save
+pm2 startup
+```
+
+**Ports:** n8n on 5678, Evolution API on 8080 — same as Docker plan. All n8n workflow steps identical.

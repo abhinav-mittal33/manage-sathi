@@ -48,6 +48,70 @@ export async function sendSiteNoteNotification(
   }
 }
 
+export async function sendSiteVisitConfirmation(
+  note: {
+    id: string;
+    noteText: string | null;
+    photoUrl: string | null;
+    photoBase64: string | null;
+    photoMimeType: string | null;
+    capturedAt: Date | string;
+    latitude: string | null;
+    longitude: string | null;
+  },
+  project: { id: string; name: string },
+  client: { name: string; phone: string }
+): Promise<void> {
+  try {
+    await callN8nWebhook(process.env.N8N_SITE_VISIT_WEBHOOK ?? '', {
+      noteId: note.id,
+      projectId: project.id,
+      projectName: project.name,
+      noteText: note.noteText,
+      photoUrl: note.photoUrl,
+      photoBase64: note.photoBase64,
+      photoMimeType: note.photoMimeType,
+      capturedAt: note.capturedAt,
+      gps: note.latitude ? `${note.latitude},${note.longitude}` : null,
+      clientName: client.name,
+      clientPhone: client.phone,
+    });
+  } catch (err) {
+    console.error('[WhatsApp] sendSiteVisitConfirmation failed:', err);
+  }
+}
+
+export async function sendApprovalRequest(
+  note: {
+    id: string;
+    noteText: string | null;
+    photoUrl: string | null;
+    photoBase64: string | null;
+    photoMimeType: string | null;
+    capturedAt: Date | string;
+  },
+  project: { id: string; name: string },
+  client: { name: string; phone: string }
+): Promise<void> {
+  try {
+    await callN8nWebhook(process.env.N8N_APPROVAL_WEBHOOK ?? '', {
+      noteId: note.id,
+      projectId: project.id,
+      projectName: project.name,
+      suggestion: note.noteText,
+      photoUrl: note.photoUrl,
+      photoBase64: note.photoBase64,
+      photoMimeType: note.photoMimeType,
+      capturedAt: note.capturedAt,
+      clientName: client.name,
+      clientPhone: client.phone,
+      appUrl: process.env.NEXT_PUBLIC_APP_URL,
+    });
+  } catch (err) {
+    console.error('[WhatsApp] sendApprovalRequest failed:', err);
+  }
+}
+
 export async function sendDrawingForApproval(
   drawing: {
     id: string;

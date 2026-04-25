@@ -204,6 +204,10 @@ export const siteNotes = pgTable(
     longitude: decimal('longitude', { precision: 10, scale: 7 }),
     capturedAt: timestamp('captured_at', { withTimezone: true }).notNull(),
     syncedAt: timestamp('synced_at', { withTimezone: true }),
+    noteType: varchar('note_type', { length: 20 }).notNull().default('personal'),
+    // noteType: 'site_visit' | 'personal' | 'approval_request'
+    approvalStatus: varchar('approval_status', { length: 20 }),
+    // approvalStatus: 'pending' | 'approved' | 'rejected' | NULL (only for approval_request)
     whatsappSent: boolean('whatsapp_sent').notNull().default(false),
     createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
     updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),

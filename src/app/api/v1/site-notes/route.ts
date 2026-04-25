@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireAuth } from '@/lib/auth';
-import { siteNoteSchema } from '@/lib/validations/site-note';
+import { siteNoteSchema, NOTE_TYPES, type NoteType } from '@/lib/validations/site-note';
 import { createNote, listNotes } from '@/lib/services/site-note.service';
 import type { ApiResponse } from '@/types';
 
@@ -11,12 +11,16 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     const params = request.nextUrl.searchParams;
 
     const projectId = params.get('projectId') ?? undefined;
+    const rawNoteType = params.get('noteType') ?? undefined;
+    const noteType = rawNoteType && (NOTE_TYPES as readonly string[]).includes(rawNoteType)
+      ? rawNoteType as NoteType
+      : undefined;
 
     const rawLimit = parseInt(params.get('limit') ?? '20', 10);
     const limit = isNaN(rawLimit) || rawLimit < 1 ? 20 : Math.min(rawLimit, 50);
     const cursor = params.get('cursor') ?? undefined;
 
-    const { notes, nextCursor } = await listNotes(auth.firmId, { projectId, limit, cursor });
+    const { notes, nextCursor } = await listNotes(auth.firmId, { projectId, limit, cursor, noteType });
 
     return NextResponse.json({
       success: true,

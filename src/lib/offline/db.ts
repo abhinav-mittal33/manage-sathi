@@ -8,6 +8,7 @@ interface ManageSathiDB extends DBSchema {
       projectId: string;
       firmId: string;
       authorId: string;
+      noteType?: 'site_visit' | 'personal' | 'approval_request';
       noteText: string | null;
       photoLocalKey: string | null;
       latitude: number | null;
@@ -51,16 +52,19 @@ let dbPromise: Promise<IDBPDatabase<ManageSathiDB>> | null = null;
 
 export function getOfflineDB(): Promise<IDBPDatabase<ManageSathiDB>> {
   if (!dbPromise) {
-    dbPromise = openDB<ManageSathiDB>('manage-sathi-offline', 1, {
-      upgrade(db) {
-        const noteStore = db.createObjectStore('site-notes', { keyPath: 'localId' });
-        noteStore.createIndex('by-project', 'projectId');
-        noteStore.createIndex('by-sync-status', 'syncStatus');
+    dbPromise = openDB<ManageSathiDB>('manage-sathi-offline', 2, {
+      upgrade(db, oldVersion) {
+        if (oldVersion < 1) {
+          const noteStore = db.createObjectStore('site-notes', { keyPath: 'localId' });
+          noteStore.createIndex('by-project', 'projectId');
+          noteStore.createIndex('by-sync-status', 'syncStatus');
 
-        db.createObjectStore('photos', { keyPath: 'key' });
+          db.createObjectStore('photos', { keyPath: 'key' });
 
-        const queueStore = db.createObjectStore('sync-queue', { autoIncrement: true });
-        queueStore.createIndex('by-entity', 'entityLocalId');
+          const queueStore = db.createObjectStore('sync-queue', { autoIncrement: true });
+          queueStore.createIndex('by-entity', 'entityLocalId');
+        }
+        // v2: noteType field added — no structural change, old records read as noteType=undefined → treated as 'personal'
       },
     });
   }

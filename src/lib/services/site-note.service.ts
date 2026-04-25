@@ -4,11 +4,16 @@ import {
   findNoteByLocalId,
   findSiteNoteById,
   findProjectForNote,
+  findProjectWithClientForNote,
   listSiteNotes,
   type SiteNoteRow,
 } from '@/lib/dal/site-note.dal';
-import { sendSiteNoteNotification } from '@/lib/whatsapp';
-import type { SiteNoteInput } from '@/lib/validations/site-note';
+import {
+  sendSiteNoteNotification,
+  sendSiteVisitConfirmation,
+  sendApprovalRequest,
+} from '@/lib/whatsapp';
+import type { SiteNoteInput, NoteType } from '@/lib/validations/site-note';
 
 export type { SiteNoteRow };
 
@@ -26,6 +31,50 @@ export interface SyncResult {
   results: SyncResultItem[];
 }
 
+async function dispatchWhatsApp(note: SiteNoteRow, input: SiteNoteInput, firmId: string): Promise<void> {
+  const noteType = input.noteType ?? 'personal';
+
+  if (noteType === 'personal') return;
+
+  if (noteType === 'site_visit' || noteType === 'approval_request') {
+    const projectWithClient = await findProjectWithClientForNote(input.projectId, firmId);
+    if (!projectWithClient) return;
+
+    const client = { name: projectWithClient.clientName, phone: projectWithClient.clientPhone };
+    const project = { id: projectWithClient.id, name: projectWithClient.name };
+
+    if (noteType === 'site_visit') {
+      await sendSiteVisitConfirmation(
+        {
+          id: note.id,
+          noteText: note.noteText,
+          photoUrl: note.photoUrl,
+          photoBase64: input.photoBase64 ?? null,
+          photoMimeType: input.photoMimeType ?? null,
+          capturedAt: note.capturedAt,
+          latitude: note.latitude,
+          longitude: note.longitude,
+        },
+        project,
+        client
+      );
+    } else {
+      await sendApprovalRequest(
+        {
+          id: note.id,
+          noteText: note.noteText,
+          photoUrl: note.photoUrl,
+          photoBase64: input.photoBase64 ?? null,
+          photoMimeType: input.photoMimeType ?? null,
+          capturedAt: note.capturedAt,
+        },
+        project,
+        client
+      );
+    }
+  }
+}
+
 // ─── Online creation path ────────────────────────────────────────────────────
 
 export async function createNote(
@@ -35,25 +84,10 @@ export async function createNote(
 ): Promise<SiteNoteRow> {
   const note = await insertSiteNote(firmId, userId, input);
 
-  // Dispatch WhatsApp notification — failure must never fail the main request
   try {
-    const project = await findProjectForNote(input.projectId, firmId);
-    if (project) {
-      await sendSiteNoteNotification(
-        {
-          id: note.id,
-          noteText: note.noteText,
-          photoUrl: note.photoUrl,
-          capturedAt: note.capturedAt,
-          latitude: note.latitude,
-          longitude: note.longitude,
-        },
-        project,
-        userId
-      );
-    }
+    await dispatchWhatsApp(note, input, firmId);
   } catch (err) {
-    console.error('[SiteNoteService] WhatsApp notification failed for note', note.id, err);
+    console.error('[SiteNoteService] WhatsApp dispatch failed for note', note.id, err);
   }
 
   return note;
@@ -73,7 +107,6 @@ export async function syncNotes(
 
   for (const input of notes) {
     try {
-      // Idempotency check: if (firmId, localId) already exists → skip
       const existing = await findNoteByLocalId(firmId, input.localId);
       if (existing) {
         skipped++;
@@ -85,25 +118,10 @@ export async function syncNotes(
       synced++;
       results.push({ localId: input.localId, status: 'synced', id: note.id });
 
-      // WhatsApp per-note — failure must never abort the rest of the batch
       try {
-        const project = await findProjectForNote(input.projectId, firmId);
-        if (project) {
-          await sendSiteNoteNotification(
-            {
-              id: note.id,
-              noteText: note.noteText,
-              photoUrl: note.photoUrl,
-              capturedAt: note.capturedAt,
-              latitude: note.latitude,
-              longitude: note.longitude,
-            },
-            project,
-            userId
-          );
-        }
+        await dispatchWhatsApp(note, input, firmId);
       } catch (waErr) {
-        console.error('[SiteNoteService] WhatsApp notification failed for note', note.id, waErr);
+        console.error('[SiteNoteService] WhatsApp dispatch failed for note', note.id, waErr);
       }
     } catch (err) {
       failed++;
@@ -120,11 +138,10 @@ export async function syncNotes(
 
 export async function listNotes(
   firmId: string,
-  filters: { projectId?: string; limit: number; cursor?: string }
+  filters: { projectId?: string; limit: number; cursor?: string; noteType?: NoteType }
 ): Promise<{ notes: SiteNoteRow[]; nextCursor: string | null }> {
-  const rows = await listSiteNotes(firmId, filters.projectId, filters.limit, filters.cursor);
+  const rows = await listSiteNotes(firmId, filters.projectId, filters.limit, filters.cursor, filters.noteType);
 
-  // If we got exactly `limit` rows there may be more — expose the last capturedAt as cursor
   const nextCursor =
     rows.length === filters.limit
       ? rows[rows.length - 1].capturedAt.toISOString()
