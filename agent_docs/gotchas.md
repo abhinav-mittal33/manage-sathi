@@ -10,6 +10,27 @@
 
 ---
 
+## Session 3 Work (2026-04-25) — site-visit-confirm fix
+
+### WAHA Core tier cannot send images (sendImage / sendFile are Plus-only)
+- **Symptom:** `site-visit-confirm` n8n workflow errors with WAHA 422 "The feature is available only in Plus version for 'WEBJS' engine"
+- **Cause:** WAHA WEBJS Core free tier blocks ALL binary sends — both base64 and URL-based. Only `sendText` works on free tier.
+- **Fix:** n8n `site-visit-confirm` workflow `Send Image` node has `onError: "continueErrorOutput"` + error connection → `Send Text`. Site visit notes fall back to text-only WhatsApp automatically. Photos are visible in the app.
+- **To get real images in WhatsApp:** Upgrade to WAHA Plus (~$19/month). No code change needed — photoUrl (from R2) flows to the same Send Image node which will succeed with Plus.
+- **Workflow change location:** n8n `site-visit-confirm` workflow ID `NaJbZqvyhcFZllun`, `Send Image` node
+
+### SQLite WAL mode hides recent writes from docker cp
+- **Symptom:** `docker cp n8n:/home/node/.n8n/database.sqlite` returns stale data — new executions not visible
+- **Cause:** SQLite WAL mode keeps writes in `database.sqlite-wal` until checkpoint. docker cp misses the WAL file.
+- **Fix:** To read live n8n data: `docker run --rm -v manage-sathi-local_n8n_data:/data python:3.11-alpine python3 -c "import sqlite3; db=sqlite3.connect('/data/database.sqlite'); db.execute('PRAGMA wal_checkpoint(TRUNCATE)'); ..."`
+
+### n8n SQLite file must be owned by UID 1000 (node user)
+- **Symptom:** n8n crashes on start: `SQLITE_READONLY: attempt to write a readonly database`
+- **Cause:** After `docker cp` or Python container writes (which run as root/UID 501), the database.sqlite owner changes. n8n runs as UID 1000 (`node`); if file is owned by different UID and group is not `1000`, n8n can only read.
+- **Fix:** `docker run --rm -v manage-sathi-local_n8n_data:/data alpine:latest sh -c "chown 1000:1000 /data/database.sqlite && chmod 664 /data/database.sqlite"`
+
+---
+
 ## Session 2 Work (2026-04-24) — Complete Record
 
 ### Local Dev WhatsApp Stack
@@ -27,8 +48,9 @@
 | QwVaeNnsut3FsiU4 | Site Note → WhatsApp | /webhook/site-note |
 | RIFm1mwlHVruLCsY | Invoice → WhatsApp | /webhook/invoice |
 | mrO4M5l24MTP4pBO | Drawing Approval → WhatsApp | /webhook/drawing-approval |
-| NaJbZqvyhcFZllun | site-visit-confirm | /webhook/site-visit |
-| vXXJ8FOOvI4Qpgts | approval-request | /webhook/approval-request |
+| NaJbZqvyhcFZllun | site-visit-confirm | /webhook/site-visit | Falls back to text on WAHA 422 |
+| vXXJ8FOOvI4Qpgts | approval-request | /webhook/approval-request | |
+| incomingWhatsAppReply1 | Incoming WhatsApp Reply → Approval Update | (WAHA pushes incoming messages) | Calls /api/v1/webhooks/n8n/site-note-approval |
 
 ### n8n Workflow Node Version Rules (CRITICAL)
 - Webhook node MUST be `typeVersion: 2` — v1 crashes execution silently, empty data, no error captured
