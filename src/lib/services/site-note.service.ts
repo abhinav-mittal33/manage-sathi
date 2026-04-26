@@ -5,6 +5,7 @@ import {
   findProjectForNote,
   findProjectWithClientForNote,
   listSiteNotes,
+  markWhatsappSent,
   type SiteNoteRow,
 } from '@/lib/dal/site-note.dal';
 import {
@@ -71,6 +72,7 @@ async function dispatchWhatsApp(note: SiteNoteRow, input: SiteNoteInput, firmId:
         client
       );
     }
+    await markWhatsappSent(note.id);
   }
 }
 
