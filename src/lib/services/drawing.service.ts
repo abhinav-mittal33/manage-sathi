@@ -9,6 +9,7 @@ import {
   insertRevisionRow,
   approveDrawing,
   markDrawingRevised,
+  findPendingDrawingByClientPhone,
   type DrawingSlot,
   type DrawingRow,
 } from '@/lib/dal/drawing.dal';
@@ -218,7 +219,7 @@ export async function processApprovalWebhook(
   if (!drawing) return { drawing: null, notFound: true };
 
   if (input.action === 'approved') {
-    const updated = await approveDrawing(drawing.id, input.clientPhone);
+    const updated = await approveDrawing(drawing.id, input.clientPhone, input.replyText ?? null);
     if (!updated) {
       return {
         drawing,
@@ -242,6 +243,32 @@ export async function processApprovalWebhook(
   }
 
   return { drawing, notFound: false };
+}
+
+// ─── Process drawing approval reply from incoming WhatsApp (phone-based) ─────
+// Used by the unified /incoming-reply webhook — no drawingId in scope, only phone.
+
+export interface DrawingReplyResult {
+  drawing: DrawingRow | null;
+  skipped: boolean;
+  reason?: string;
+}
+
+export async function processDrawingReplyByPhone(
+  phone: string,
+  reply: 'YES' | 'NO',
+  opinionText?: string | null,
+): Promise<DrawingReplyResult> {
+  const drawing = await findPendingDrawingByClientPhone(phone);
+  if (!drawing) return { drawing: null, skipped: true, reason: 'no submitted drawing found for this phone' };
+
+  if (reply === 'YES') {
+    const updated = await approveDrawing(drawing.id, phone, opinionText ?? null);
+    return { drawing: updated, skipped: false };
+  } else {
+    const updated = await markDrawingRevised(drawing.id);
+    return { drawing: updated, skipped: false };
+  }
 }
 
 // ─── Typed error for project-not-found (surfaced as 404 in the route) ────────

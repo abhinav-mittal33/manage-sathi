@@ -1,6 +1,6 @@
-import { eq, and, isNull, max, inArray } from 'drizzle-orm';
+import { eq, and, isNull, max, inArray, desc } from 'drizzle-orm';
 import { db } from '@/db';
-import { drawings, projects } from '@/db/schema';
+import { drawings, projects, clients } from '@/db/schema';
 import type { CreateDrawingInput } from '@/lib/validations/drawing';
 import { ALL_DRAWING_TYPES, type DrawingType, type DrawingStatus } from '@/lib/validations/drawing';
 
@@ -19,6 +19,7 @@ export interface DrawingSlot {
   approvedAt: Date | null;
   approvedBy: string | null;
   notes: string | null;
+  clientSuggestion: string | null;
   createdAt: Date | null;
   updatedAt: Date | null;
 }
@@ -222,16 +223,19 @@ export async function insertRevisionRow(
 // Webhook: approve a submitted drawing
 export async function approveDrawing(
   id: string,
-  approvedBy: string
+  approvedBy: string,
+  clientSuggestion?: string | null,
 ): Promise<DrawingRow | null> {
+  const setValues: Record<string, unknown> = {
+    status: 'approved',
+    approvedAt: new Date(),
+    approvedBy,
+    updatedAt: new Date(),
+  };
+  if (clientSuggestion != null) setValues.clientSuggestion = clientSuggestion;
   const [row] = await db
     .update(drawings)
-    .set({
-      status: 'approved',
-      approvedAt: new Date(),
-      approvedBy,
-      updatedAt: new Date(),
-    })
+    .set(setValues)
     .where(and(eq(drawings.id, id), eq(drawings.status, 'submitted'), isNull(drawings.deletedAt)))
     .returning();
   return row ?? null;
@@ -262,6 +266,7 @@ function rowToSlot(row: DrawingRow): DrawingSlot {
     approvedAt: row.approvedAt,
     approvedBy: row.approvedBy,
     notes: row.notes,
+    clientSuggestion: row.clientSuggestion,
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
   };
@@ -280,7 +285,47 @@ function emptySlot(projectId: string, drawingType: DrawingType): DrawingSlot {
     approvedAt: null,
     approvedBy: null,
     notes: null,
+    clientSuggestion: null,
     createdAt: null,
     updatedAt: null,
   };
+}
+
+// Find the most recent submitted drawing for a client — used by incoming WhatsApp webhook.
+// Tries all 4 common Indian phone formats, falls back to most-recent submitted when phone
+// can't be matched (e.g. WhatsApp @lid privacy JIDs).
+export async function findPendingDrawingByClientPhone(
+  phone: string
+): Promise<DrawingRow | null> {
+  const digits = phone.replace(/\D/g, '');
+  const last10 = digits.slice(-10);
+  const possibleFormats = ['+91' + last10, '91' + last10, last10, '0' + last10];
+
+  const [byPhone] = await db
+    .select({ drawing: drawings })
+    .from(drawings)
+    .innerJoin(projects, eq(drawings.projectId, projects.id))
+    .innerJoin(clients, eq(projects.clientId, clients.id))
+    .where(
+      and(
+        eq(drawings.status, 'submitted'),
+        isNull(drawings.deletedAt),
+        isNull(projects.deletedAt),
+        inArray(clients.phone, possibleFormats)
+      )
+    )
+    .orderBy(desc(drawings.submittedAt))
+    .limit(1);
+
+  if (byPhone) return byPhone.drawing;
+
+  // @lid JID fallback: most recent submitted drawing across all clients
+  const [byRecent] = await db
+    .select()
+    .from(drawings)
+    .where(and(eq(drawings.status, 'submitted'), isNull(drawings.deletedAt)))
+    .orderBy(desc(drawings.submittedAt))
+    .limit(1);
+
+  return byRecent ?? null;
 }

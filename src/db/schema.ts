@@ -133,6 +133,8 @@ export const drawings = pgTable(
     approvedAt: timestamp('approved_at', { withTimezone: true }),
     approvedBy: varchar('approved_by', { length: 255 }),
     notes: text('notes'),
+    clientSuggestion: text('client_suggestion'),
+    // Text the client sent with their YES/NO reply to a drawing approval ("yes but lighter shade")
     createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
     updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
     deletedAt: timestamp('deleted_at', { withTimezone: true }),
@@ -208,6 +210,8 @@ export const siteNotes = pgTable(
     // noteType: 'site_visit' | 'personal' | 'approval_request'
     approvalStatus: varchar('approval_status', { length: 20 }),
     // approvalStatus: 'pending' | 'approved' | 'rejected' | NULL (only for approval_request)
+    clientResponseText: text('client_response_text'),
+    // Text the client sent with their YES/NO reply ("yes but use marble tiles")
     whatsappSent: boolean('whatsapp_sent').notNull().default(false),
     createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
     updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),

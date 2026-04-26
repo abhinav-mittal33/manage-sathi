@@ -13,6 +13,7 @@ const NOTE_COLUMNS = {
   authorId: siteNotes.authorId,
   noteType: siteNotes.noteType,
   approvalStatus: siteNotes.approvalStatus,
+  clientResponseText: siteNotes.clientResponseText,
   noteText: siteNotes.noteText,
   photoUrl: siteNotes.photoUrl,
   photoLocalKey: siteNotes.photoLocalKey,
@@ -113,11 +114,14 @@ export async function markWhatsappSent(id: string): Promise<void> {
 export async function updateNoteApprovalStatus(
   id: string,
   firmId: string,
-  status: 'approved' | 'rejected'
+  status: 'approved' | 'rejected',
+  clientResponseText?: string | null,
 ): Promise<boolean> {
+  const setValues: Record<string, unknown> = { approvalStatus: status, updatedAt: new Date() };
+  if (clientResponseText != null) setValues.clientResponseText = clientResponseText;
   const result = await db
     .update(siteNotes)
-    .set({ approvalStatus: status, updatedAt: new Date() })
+    .set(setValues)
     .where(
       and(
         eq(siteNotes.id, id),

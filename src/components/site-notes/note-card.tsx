@@ -14,6 +14,7 @@ export interface NoteDisplay {
   approvalStatus?: ApprovalStatus | null;
   noteText?: string | null;
   photoUrl?: string | null;
+  clientResponseText?: string | null;
   capturedAt: string;
   syncStatus?: 'pending' | 'syncing' | 'synced' | 'error';
   projectName?: string;
@@ -133,6 +134,12 @@ export function NoteCard({ note, selected, onSelect, onPhotoClick }: NoteCardPro
           <p className="text-sm text-charcoal leading-relaxed">
             <span className="font-medium text-amber-600">Suggestion: </span>
             {note.noteText}
+          </p>
+        )}
+        {type === 'approval_request' && note.clientResponseText && (
+          <p className="text-sm text-charcoal leading-relaxed">
+            <span className="font-medium text-sage">Client replied: </span>
+            {note.clientResponseText}
           </p>
         )}
         {type !== 'approval_request' && note.noteText && (

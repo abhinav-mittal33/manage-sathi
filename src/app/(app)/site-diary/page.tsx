@@ -20,6 +20,7 @@ interface ApiNote {
   localId: string;
   noteType?: NoteType;
   approvalStatus?: string | null;
+  clientResponseText?: string | null;
   noteText: string | null;
   photoUrl: string | null;
   capturedAt: string;
@@ -102,6 +103,7 @@ export default function SiteDiaryPage() {
         localId: n.localId,
         noteType: n.noteType ?? 'personal',
         approvalStatus: n.approvalStatus as NoteDisplay['approvalStatus'],
+        clientResponseText: n.clientResponseText,
         noteText: n.noteText,
         photoUrl: n.photoUrl,
         capturedAt: n.capturedAt,
@@ -146,6 +148,7 @@ export default function SiteDiaryPage() {
         id: n.id, localId: n.localId,
         noteType: n.noteType ?? 'personal',
         approvalStatus: n.approvalStatus as NoteDisplay['approvalStatus'],
+        clientResponseText: n.clientResponseText,
         noteText: n.noteText, photoUrl: n.photoUrl,
         capturedAt: n.capturedAt, syncStatus: 'synced' as const,
         projectName: n.project?.name,
