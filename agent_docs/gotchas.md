@@ -67,6 +67,54 @@
 
 ---
 
+## Session 4 Work (2026-04-26) — WhatsApp end-to-end + opinion text
+
+### n8n Code node returning `null` shows "success" but runs nothing
+- **Symptom:** n8n execution_entity shows `status=success` but DB never updates, HTTP call never fires
+- **Cause:** Code node returning `null` emits zero items. Downstream nodes don't execute. n8n still marks execution "success". Extremely misleading.
+- **Fix:** `return { json: {...} }` when you want output. `return null` only when you intentionally want to skip. Always verify by checking if downstream nodes ran (not just execution status).
+
+### Evolution API → n8n webhook path must be the FULL path
+- **Symptom:** Incoming WhatsApp messages never reach n8n. Evolution API POST returns 200 but n8n log shows nothing.
+- **Cause:** Evolution API webhook URL was set to `http://n8n:5678` (base only). Evolution API POSTs to that exact URL; n8n root returns 200 but ignores body.
+- **Fix:** Set Evolution API instance webhook to `http://n8n:5678/webhook/incoming-whatsapp` (the full webhook path from the n8n Webhook node).
+- **Set via:** `POST http://localhost:8080/webhook/set/manage-sathi` with body `{"enabled":true,"url":"http://n8n:5678/webhook/incoming-whatsapp","webhookByEvents":false,"webhookBase64":false,"events":["MESSAGES_UPSERT"]}`
+
+### App→n8n + Evolution API direction — no Cloudflare tunnel needed for local dev
+- **For local dev:** n8n on `localhost:5678` — app calls `N8N_*_WEBHOOK=http://localhost:5678/webhook/...`
+- **Evolution API → n8n:** uses Docker internal DNS — `http://n8n:5678/webhook/incoming-whatsapp`
+- **n8n → app:** uses `http://host.docker.internal:3001/api/v1/webhooks/n8n/incoming-reply`
+- **Cloudflare tunnel only needed for:** production n8n on Oracle Cloud → public HTTPS. Not needed locally.
+- **Fix env vars:** Run `/tmp/fix_env.py` which uses regex to update all N8N vars in `.env.local` to localhost:5678 paths.
+
+### `workflow_history` PK is `versionId`, not `id`
+- **Symptom:** `sqlite3.OperationalError: no such column: id` when updating workflow_history
+- **Cause:** `workflow_history` table uses `versionId` (UUID) as primary key, not `id`
+- **Fix:** `db.execute("UPDATE workflow_history SET nodes=? WHERE versionId=?", (nodes_json, hist_version_id))`
+
+### n8n SQLite patch must `db.commit()` BEFORE `db.close()` — no trailing PRAGMA after commit
+- **Symptom:** Patch script prints "Done." but changes are rolled back (verified by re-reading DB)
+- **Cause:** Python sqlite3 DML (UPDATE) is in a transaction. If `db.close()` is called before `db.commit()`, the connection closes and the transaction rolls back. A `PRAGMA wal_checkpoint` AFTER the UPDATE (but before `db.commit()`) may throw `OperationalError: database table is locked`, causing the script to crash before reaching `db.commit()`.
+- **Fix:** Order: (1) fetch+patch, (2) UPDATE both `workflow_entity` and `workflow_history`, (3) `db.commit()`, (4) `db.close()`. Drop trailing `PRAGMA wal_checkpoint` — it's optional and causes crashes when Docker container has DB locked.
+
+### n8n Code node opinion text — first-word matching, not full-string
+- **Symptom:** Client types "YES please proceed" → Code node returns null → approval never updates
+- **Cause:** Old Code node matched FULL message to `'YES'` exactly. Any extra words caused no match.
+- **Fix:** Split on whitespace, check only `parts[0].toUpperCase()`, capture `parts.slice(1).join(' ')` as `opinionText`. Return `{ json: { phone, reply, opinionText: rest } }`.
+- **HTTP node jsonBody:** `={{ JSON.stringify({phone: $json.phone, reply: $json.reply, opinionText: $json.opinionText || null}) }}`
+
+### `markWhatsappSent` must be called after dispatch — not auto-called
+- **Symptom:** Note created, WhatsApp fires (n8n execution visible), but `whatsappSent=false` in DB
+- **Cause:** `markWhatsappSent(note.id)` exists in DAL but was never called from `dispatchWhatsApp()` in the service
+- **Fix:** Call `await markWhatsappSent(note.id)` at the end of `dispatchWhatsApp()` (after the WhatsApp call). This is in `src/lib/services/site-note.service.ts`.
+
+### `sendApprovalRequest` / `sendSiteVisitConfirmation` had silent inner try/catch
+- **Symptom:** Webhook fails but no error visible; `whatsappSent` stays false with no log
+- **Cause:** Both functions had their own `try { ... } catch (err) { console.error(...) }` — errors swallowed BEFORE the service-level catch could see them or call `markWhatsappSent`
+- **Fix:** Removed inner try/catch from both. Errors now propagate to `dispatchWhatsApp`'s outer catch in the service, which logs them. This is the correct single-catch-per-layer pattern.
+
+---
+
 ## Session 2 Work (2026-04-24) — Complete Record
 
 ### Local Dev WhatsApp Stack
