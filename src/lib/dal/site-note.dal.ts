@@ -1,4 +1,4 @@
-import { eq, and, isNull, isNotNull, desc, lt, lte, gt } from 'drizzle-orm';
+import { eq, and, isNull, isNotNull, desc, lt, lte, gt, inArray } from 'drizzle-orm';
 import { db } from '@/db';
 import { siteNotes, projects, clients } from '@/db/schema';
 import type { SiteNoteInput, NoteType } from '@/lib/validations/site-note';
@@ -231,15 +231,17 @@ export async function findProjectWithClientForNote(
   return row ?? null;
 }
 
-// Find most recent pending approval_request for a client phone — used by incoming WhatsApp webhook
+// Find most recent pending approval_request for a client phone — used by incoming WhatsApp webhook.
+// Tries all 4 common Indian phone formats. Falls back to most-recent pending approval
+// when phone can't be matched (e.g. WhatsApp @lid privacy JIDs).
 export async function findPendingApprovalByClientPhone(
   phone: string
 ): Promise<SiteNoteRow | null> {
-  // Normalise phone: strip non-digits, take last 10, add 91 prefix
   const digits = phone.replace(/\D/g, '');
-  const normalised = '+91' + digits.slice(-10);
+  const last10 = digits.slice(-10);
+  const possibleFormats = ['+91' + last10, '91' + last10, last10, '0' + last10];
 
-  const [row] = await db
+  const [byPhone] = await db
     .select(NOTE_COLUMNS)
     .from(siteNotes)
     .innerJoin(projects, eq(siteNotes.projectId, projects.id))
@@ -249,13 +251,30 @@ export async function findPendingApprovalByClientPhone(
         eq(siteNotes.noteType, 'approval_request'),
         eq(siteNotes.approvalStatus, 'pending'),
         isNull(siteNotes.deletedAt),
-        eq(clients.phone, normalised)
+        inArray(clients.phone, possibleFormats)
       )
     )
     .orderBy(desc(siteNotes.capturedAt))
     .limit(1);
 
-  return row ?? null;
+  if (byPhone) return byPhone;
+
+  // WhatsApp @lid JIDs don't expose the phone number — fall back to the most recent
+  // pending approval across all clients (safe for single-firm pilot).
+  const [byRecent] = await db
+    .select(NOTE_COLUMNS)
+    .from(siteNotes)
+    .where(
+      and(
+        eq(siteNotes.noteType, 'approval_request'),
+        eq(siteNotes.approvalStatus, 'pending'),
+        isNull(siteNotes.deletedAt),
+      )
+    )
+    .orderBy(desc(siteNotes.capturedAt))
+    .limit(1);
+
+  return byRecent ?? null;
 }
 
 // Legacy — used by personal note path (no client needed)

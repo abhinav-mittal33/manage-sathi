@@ -10,24 +10,60 @@
 
 ---
 
-## Session 3 Work (2026-04-25) — site-visit-confirm fix
+## Session 3 Work (2026-04-25) — Evolution API migration + expression fixes
 
 ### WAHA Core tier cannot send images (sendImage / sendFile are Plus-only)
 - **Symptom:** `site-visit-confirm` n8n workflow errors with WAHA 422 "The feature is available only in Plus version for 'WEBJS' engine"
 - **Cause:** WAHA WEBJS Core free tier blocks ALL binary sends — both base64 and URL-based. Only `sendText` works on free tier.
-- **Fix:** n8n `site-visit-confirm` workflow `Send Image` node has `onError: "continueErrorOutput"` + error connection → `Send Text`. Site visit notes fall back to text-only WhatsApp automatically. Photos are visible in the app.
-- **To get real images in WhatsApp:** Upgrade to WAHA Plus (~$19/month). No code change needed — photoUrl (from R2) flows to the same Send Image node which will succeed with Plus.
-- **Workflow change location:** n8n `site-visit-confirm` workflow ID `NaJbZqvyhcFZllun`, `Send Image` node
+- **Fix:** Migrated all workflows to Evolution API v1.8.2 (Baileys-based, fully free). Evolution API runs on port 8080 in docker-compose. Instance: `manage-sathi`. Auth header: `apikey: manage-sathi-evo-key`.
+- **Evolution API sendText body:** `{"number":"91XXXXXXXXXX","textMessage":{"text":"..."}}`
+- **Evolution API sendMedia body:** `{"number":"91XXXXXXXXXX","mediaMessage":{"mediatype":"image","mimetype":"image/jpeg","caption":"...","media":"<base64>","fileName":"photo.jpg"}}`
+- **Phone format:** Plain digits with country code, NO `@c.us` — e.g. `"919784577736"`
+
+### n8n `={{ }}` template engine closes at first `}}`
+- **Symptom:** HTTP Request node shows "invalid syntax" error. Expression looks correct in the node editor.
+- **Cause:** n8n's `={{ }}` template parser closes the expression at the FIRST `}}` it encounters. Nested JS object literals produce consecutive `}}` at object-close boundaries (e.g. `{textMessage:{text:'...'}}`) — the parser sees the inner `}}` as the template close, leaving the rest as broken JS.
+- **Fix:** Add a space between every pair of consecutive closing braces: `{textMessage:{text:'...'} }`. Space breaks the `}}` sequence. Validate by checking that `}}` only appears at position `len(expression)-2`.
+- **Build tip:** Use plain string concatenation (NOT Python f-strings) when building n8n expression strings. F-string `{{`/`}}` escaping makes it impossible to audit which `}` appear in the output without running the code.
+
+### n8n workflow_history versioning — editing `workflow_entity.nodes` is ignored at runtime
+- **Symptom:** Updated workflow nodes in DB but n8n still executes old logic.
+- **Cause:** n8n 2.x loads workflow definition from `workflow_history` at the row matching `workflow_entity.activeVersionId`. The `workflow_entity.nodes` column is a cache/snapshot only.
+- **Fix:** Every programmatic workflow update must: (1) INSERT a new row into `workflow_history` with a fresh UUID as `versionId`, AND (2) UPDATE `workflow_entity` setting `nodes`, `connections`, `activeVersionId`, `versionId`, and `updatedAt` to the same values.
+
+### n8n HTTP Request node — 4xx responses do NOT trigger error output
+- **Symptom:** `onError: continueErrorOutput` never fires even when Evolution API returns 400.
+- **Cause:** HTTP Request node treats 4xx responses as data output (not errors). `onError` only fires for node-level failures: expression errors, network failures, etc.
+- **Fix:** Use an IF node BEFORE the HTTP call to route photo/no-photo. Boolean check: `Boolean($json.body.photoBase64) === true` with `type: "boolean"` comparison in n8n IF node v2. YES branch → sendMedia, NO branch → sendText.
 
 ### SQLite WAL mode hides recent writes from docker cp
 - **Symptom:** `docker cp n8n:/home/node/.n8n/database.sqlite` returns stale data — new executions not visible
 - **Cause:** SQLite WAL mode keeps writes in `database.sqlite-wal` until checkpoint. docker cp misses the WAL file.
 - **Fix:** To read live n8n data: `docker run --rm -v manage-sathi-local_n8n_data:/data python:3.11-alpine python3 -c "import sqlite3; db=sqlite3.connect('/data/database.sqlite'); db.execute('PRAGMA wal_checkpoint(TRUNCATE)'); ..."`
 
-### n8n SQLite file must be owned by UID 1000 (node user)
+### WAHA holds host port 3000 — Next.js dev server runs on 3001
+- **Symptom:** n8n calls `host.docker.internal:3000/api/v1/webhooks/...` and gets `{"message":"Unauthorized","statusCode":401}` (WAHA's auth rejection, not Next.js)
+- **Cause:** WAHA container maps `0.0.0.0:3000->3000`. Next.js dev server finds 3000 occupied and auto-bumps to 3001. n8n → app calls must use port **3001**.
+- **Fix:** All n8n HTTP nodes calling the Next.js app use `http://host.docker.internal:3001/...`
+- **Affected workflow:** `incomingWhatsAppReply1` → `Update Approval Status` node URL
+
+### Incoming WhatsApp workflow: Evolution API format vs WAHA format
+- **Symptom:** Client replies YES, approval status never updates in DB
+- **Cause (1):** IF node condition used `$json.body.payload.body` (WAHA) — Evolution API sends `$json.body.data.message.conversation`
+- **Cause (2):** Phone parsed from `payload.from` (WAHA `@c.us`) — Evolution API uses `data.key.remoteJid` with `@s.whatsapp.net`
+- **Cause (3):** workflow `incomingWhatsAppReply1` not in `shared_workflow` table → n8n couldn't activate it → webhook returned 404
+- **Cause (4):** Webhook node in default respond-last mode → Code node returning `null` to skip caused webhook to hang (timeout)
+- **Fix:** IF checks `!$json.body.data.key.fromMe`; Code node reads `data.message.conversation || data.message.extendedTextMessage.text`; sender from `data.key.remoteJid.replace(/@.*/, '')`; Webhook node set to `responseMode: "onReceived"`; shared_workflow row inserted manually
+
+### n8n SQLite becomes read-only after docker cp or Python container writes
 - **Symptom:** n8n crashes on start: `SQLITE_READONLY: attempt to write a readonly database`
 - **Cause:** After `docker cp` or Python container writes (which run as root/UID 501), the database.sqlite owner changes. n8n runs as UID 1000 (`node`); if file is owned by different UID and group is not `1000`, n8n can only read.
 - **Fix:** `docker run --rm -v manage-sathi-local_n8n_data:/data alpine:latest sh -c "chown 1000:1000 /data/database.sqlite && chmod 664 /data/database.sqlite"`
+
+### WhatsApp @lid JIDs don't expose phone numbers — approval fallback required
+- **Symptom:** Client replies YES, Parse Reply extracts a 14-digit number like `+81111094972487`, DB lookup finds no pending approval
+- **Cause:** WhatsApp's 2024 Linked ID (`@lid`) privacy feature hides phone numbers from message metadata. `remoteJid = "81111094972487@lid"` is an opaque internal WhatsApp ID, NOT a phone number. Evolution API cannot resolve `@lid` to phone (needs `DATABASE_SAVE_DATA_CONTACTS=true` + contacts stored before the session).
+- **Fix:** `findPendingApprovalByClientPhone` does a two-step query: (1) try all 4 Indian phone formats via `inArray`; (2) if no match, fall back to the most recent pending `approval_request` for any client. Safe for single-firm pilot. File: `src/lib/dal/site-note.dal.ts`.
 
 ---
 

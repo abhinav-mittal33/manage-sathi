@@ -129,7 +129,13 @@ export function NoteCard({ note, selected, onSelect, onPhotoClick }: NoteCardPro
           )}
         </div>
 
-        {note.noteText && (
+        {type === 'approval_request' && note.noteText && (
+          <p className="text-sm text-charcoal leading-relaxed">
+            <span className="font-medium text-amber-600">Suggestion: </span>
+            {note.noteText}
+          </p>
+        )}
+        {type !== 'approval_request' && note.noteText && (
           <p className="text-sm text-charcoal leading-relaxed">{note.noteText}</p>
         )}
 
