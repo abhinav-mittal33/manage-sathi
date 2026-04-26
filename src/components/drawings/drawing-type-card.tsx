@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { ExternalLink, Send, RefreshCw, Loader2 } from 'lucide-react';
+import { ExternalLink, Send, RefreshCw, Loader2, History, ChevronDown, ChevronUp } from 'lucide-react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { DrawingStatusFlow } from './drawing-status-flow';
@@ -73,6 +73,10 @@ export function DrawingTypeCard({
   const [resending, setResending] = useState(false);
   const [resendError, setResendError] = useState<string | null>(null);
 
+  const [historyOpen, setHistoryOpen] = useState(false);
+  const [historyLoading, setHistoryLoading] = useState(false);
+  const [historyVersions, setHistoryVersions] = useState<DrawingRow[] | null>(null);
+
   const status: DrawingStatus = drawing?.status ?? 'not_started';
   const badge = STATUS_BADGE_STYLES[status];
   const typeLabel = DRAWING_TYPE_LABELS[drawingType];
@@ -124,6 +128,24 @@ export function DrawingTypeCard({
     }
   }
 
+  async function handleToggleHistory() {
+    if (historyOpen) { setHistoryOpen(false); return; }
+    setHistoryOpen(true);
+    if (historyVersions !== null) return; // already loaded
+    setHistoryLoading(true);
+    try {
+      const res = await fetch(
+        `/api/v1/projects/${projectId}/drawings/history?drawingType=${drawingType}`
+      );
+      const body = await res.json();
+      setHistoryVersions(body.data ?? []);
+    } catch {
+      setHistoryVersions([]);
+    } finally {
+      setHistoryLoading(false);
+    }
+  }
+
   // For revised uploads the new version number is current + 1
   const nextVersion = drawing ? drawing.version + 1 : 1;
 
@@ -172,6 +194,72 @@ export function DrawingTypeCard({
             <div className="text-xs rounded-md bg-amber-50 border border-amber-100 px-3 py-2 text-amber-800 leading-relaxed">
               <span className="font-semibold">Client: </span>
               {drawing.clientSuggestion}
+            </div>
+          )}
+
+          {/* Version history toggle — only show when drawing exists */}
+          {drawing && (
+            <button
+              onClick={handleToggleHistory}
+              className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-[#8A9A7B] transition-colors"
+            >
+              <History className="w-3 h-3" />
+              Version history
+              {historyOpen ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
+            </button>
+          )}
+
+          {/* Version history panel */}
+          {historyOpen && (
+            <div className="border border-[#D1BFA7] rounded-lg overflow-hidden">
+              {historyLoading ? (
+                <div className="flex items-center justify-center py-4">
+                  <Loader2 className="w-4 h-4 animate-spin text-muted-foreground" />
+                </div>
+              ) : !historyVersions || historyVersions.length === 0 ? (
+                <p className="text-xs text-muted-foreground px-3 py-3">No versions yet.</p>
+              ) : (
+                <div className="divide-y divide-[#D1BFA7]/60">
+                  {historyVersions.map((v) => {
+                    const vBadge = STATUS_BADGE_STYLES[v.status as keyof typeof STATUS_BADGE_STYLES] ?? STATUS_BADGE_STYLES.not_started;
+                    return (
+                      <div key={v.id} className="px-3 py-2.5 space-y-1">
+                        <div className="flex items-center justify-between gap-2">
+                          <span className="text-xs font-semibold text-[#2C2A26]">v{v.version}</span>
+                          <span className={`text-[10px] font-medium px-1.5 py-0.5 rounded-full ${vBadge.bg} ${vBadge.text}`}>
+                            {vBadge.label}
+                          </span>
+                        </div>
+                        {v.fileUrl && (
+                          <a
+                            href={v.fileUrl}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="inline-flex items-center gap-1 text-[10px] text-[#8A9A7B] hover:underline"
+                          >
+                            <ExternalLink className="w-2.5 h-2.5" />
+                            Open file
+                          </a>
+                        )}
+                        {v.clientSuggestion && (
+                          <p className="text-[10px] text-amber-700 bg-amber-50 rounded px-2 py-1 leading-snug">
+                            <span className="font-semibold">Client: </span>{v.clientSuggestion}
+                          </p>
+                        )}
+                        {v.notes && (
+                          <p className="text-[10px] text-muted-foreground leading-snug">
+                            <span className="font-medium">Notes: </span>{v.notes}
+                          </p>
+                        )}
+                        <p className="text-[10px] text-muted-foreground">
+                          {v.submittedAt ? `Submitted ${new Date(v.submittedAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}` : 'Not yet submitted'}
+                          {v.approvedAt ? ` · Approved ${new Date(v.approvedAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}` : ''}
+                        </p>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
             </div>
           )}
 

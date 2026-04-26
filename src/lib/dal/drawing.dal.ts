@@ -291,6 +291,26 @@ function emptySlot(projectId: string, drawingType: DrawingType): DrawingSlot {
   };
 }
 
+// All versions of a drawing type for a project — newest first. Used by history panel.
+export async function listDrawingVersionsForType(
+  projectId: string,
+  firmId: string,
+  drawingType: string
+): Promise<DrawingRow[]> {
+  return db
+    .select()
+    .from(drawings)
+    .where(
+      and(
+        eq(drawings.projectId, projectId),
+        eq(drawings.firmId, firmId),
+        eq(drawings.drawingType, drawingType),
+        isNull(drawings.deletedAt)
+      )
+    )
+    .orderBy(desc(drawings.version));
+}
+
 // Find the most recent submitted drawing for a client — used by incoming WhatsApp webhook.
 // Tries all 4 common Indian phone formats, falls back to most-recent submitted when phone
 // can't be matched (e.g. WhatsApp @lid privacy JIDs).
