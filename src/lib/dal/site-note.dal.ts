@@ -55,33 +55,6 @@ export async function insertSiteNote(
   return row;
 }
 
-export async function insertSiteNoteFromSync(
-  firmId: string,
-  authorId: string,
-  input: SiteNoteInput
-): Promise<SiteNoteRow> {
-  const now = new Date();
-  const [row] = await db
-    .insert(siteNotes)
-    .values({
-      firmId,
-      authorId,
-      projectId: input.projectId,
-      localId: input.localId,
-      noteType: input.noteType ?? 'personal',
-      approvalStatus: input.noteType === 'approval_request' ? 'pending' : null,
-      noteText: input.noteText ?? null,
-      photoUrl: input.photoUrl ?? null,
-      photoLocalKey: input.photoLocalKey ?? null,
-      latitude: input.latitude != null ? String(input.latitude) : null,
-      longitude: input.longitude != null ? String(input.longitude) : null,
-      capturedAt: new Date(input.capturedAt),
-      syncedAt: now,
-    })
-    .returning();
-
-  return row;
-}
 
 export async function findNoteByLocalId(
   firmId: string,

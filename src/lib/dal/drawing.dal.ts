@@ -1,4 +1,4 @@
-import { eq, and, isNull, max, inArray, desc } from 'drizzle-orm';
+import { eq, and, isNull, ne, max, inArray, desc } from 'drizzle-orm';
 import { db } from '@/db';
 import { drawings, projects, clients } from '@/db/schema';
 import type { CreateDrawingInput } from '@/lib/validations/drawing';
@@ -348,4 +348,26 @@ export async function findPendingDrawingByClientPhone(
     .limit(1);
 
   return byRecent ?? null;
+}
+
+// Most recent drawing with actual activity (not 'not_started') for a project.
+// Used by project detail page to show last drawing info.
+export async function getLatestDrawingForProject(
+  projectId: string,
+  firmId: string
+): Promise<DrawingRow | null> {
+  const [row] = await db
+    .select()
+    .from(drawings)
+    .where(
+      and(
+        eq(drawings.projectId, projectId),
+        eq(drawings.firmId, firmId),
+        ne(drawings.status, 'not_started'),
+        isNull(drawings.deletedAt)
+      )
+    )
+    .orderBy(desc(drawings.submittedAt))
+    .limit(1);
+  return row ?? null;
 }

@@ -87,12 +87,8 @@ export function DrawingTypeCard({
     setResendError(null);
     try {
       const res = await fetch(
-        `/api/v1/projects/${projectId}/drawings/${drawing.id}`,
-        {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ action: 'resend_whatsapp' }),
-        }
+        `/api/v1/projects/${projectId}/drawings/${drawing.id}/send-approval`,
+        { method: 'POST' }
       );
       if (!res.ok) {
         const body = await res.json().catch(() => ({}));
@@ -114,7 +110,7 @@ export function DrawingTypeCard({
         {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ action: 'start_revision' }),
+          body: JSON.stringify({ action: 'revise' }),
         }
       );
       if (!res.ok) {

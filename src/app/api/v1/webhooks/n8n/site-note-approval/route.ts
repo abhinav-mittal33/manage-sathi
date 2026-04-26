@@ -6,7 +6,7 @@ import { findPendingApprovalByClientPhone, updateNoteApprovalStatus } from '@/li
 // No user auth — validated by X-Webhook-Secret header.
 export async function POST(request: NextRequest): Promise<NextResponse> {
   const secret = request.headers.get('X-Webhook-Secret');
-  if (process.env.N8N_WEBHOOK_SECRET && secret !== process.env.N8N_WEBHOOK_SECRET) {
+  if (!secret || secret !== process.env.N8N_WEBHOOK_SECRET) {
     return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 });
   }
 

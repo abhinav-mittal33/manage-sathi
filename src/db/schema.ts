@@ -224,6 +224,35 @@ export const siteNotes = pgTable(
   })
 );
 
+// ─── reminders ────────────────────────────────────────────────────────────────
+export const reminders = pgTable(
+  'reminders',
+  {
+    id: uuid('id').defaultRandom().primaryKey(),
+    firmId: uuid('firm_id')
+      .notNull()
+      .references(() => firms.id),
+    projectId: uuid('project_id')
+      .notNull()
+      .references(() => projects.id),
+    title: varchar('title', { length: 255 }).notNull(),
+    reminderType: varchar('reminder_type', { length: 30 }).notNull().default('general'),
+    // reminderType: 'drawing_deadline' | 'project_completion' | 'client_meeting' | 'general'
+    dueDate: date('due_date').notNull(),
+    isCompleted: boolean('is_completed').notNull().default(false),
+    completedAt: timestamp('completed_at', { withTimezone: true }),
+    notes: text('notes'),
+    createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
+    deletedAt: timestamp('deleted_at', { withTimezone: true }),
+  },
+  (t) => ({
+    projectIdIdx: index('reminders_project_id_idx').on(t.projectId),
+    firmIdIdx: index('reminders_firm_id_idx').on(t.firmId),
+    dueDateIdx: index('reminders_due_date_idx').on(t.dueDate),
+  })
+);
+
 // ─── invoices ─────────────────────────────────────────────────────────────────
 export const invoices = pgTable(
   'invoices',
@@ -320,6 +349,7 @@ export const projectsRelations = relations(projects, ({ one, many }) => ({
   siteStages: many(siteStages),
   siteNotes: many(siteNotes),
   invoices: many(invoices),
+  reminders: many(reminders),
 }));
 
 export const drawingsRelations = relations(drawings, ({ one }) => ({
@@ -343,4 +373,9 @@ export const invoicesRelations = relations(invoices, ({ one }) => ({
   project: one(projects, { fields: [invoices.projectId], references: [projects.id] }),
   firm: one(firms, { fields: [invoices.firmId], references: [firms.id] }),
   client: one(clients, { fields: [invoices.clientId], references: [clients.id] }),
+}));
+
+export const remindersRelations = relations(reminders, ({ one }) => ({
+  project: one(projects, { fields: [reminders.projectId], references: [projects.id] }),
+  firm: one(firms, { fields: [reminders.firmId], references: [firms.id] }),
 }));

@@ -1,6 +1,5 @@
 import {
   insertSiteNote,
-  insertSiteNoteFromSync,
   findNoteByLocalId,
   findSiteNoteById,
   findProjectForNote,
@@ -114,7 +113,7 @@ export async function syncNotes(
         continue;
       }
 
-      const note = await insertSiteNoteFromSync(firmId, userId, input);
+      const note = await insertSiteNote(firmId, userId, input);
       synced++;
       results.push({ localId: input.localId, status: 'synced', id: note.id });
 
