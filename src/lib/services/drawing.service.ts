@@ -139,6 +139,30 @@ export async function updateDrawing(
     return { drawing: newRow };
   }
 
+  if (input.action === 'approve') {
+    if (existing.status !== 'submitted') {
+      return { drawing: existing, invalidTransition: `Cannot approve from status '${existing.status}'` };
+    }
+    const updated = await approveDrawing(existing.id, 'manual', null);
+    if (!updated) {
+      const current = await getDrawingById(drawingId, firmId);
+      return { drawing: current!, invalidTransition: 'Approval failed — drawing may have already changed status' };
+    }
+    return { drawing: updated };
+  }
+
+  if (input.action === 'request_changes') {
+    if (existing.status !== 'submitted') {
+      return { drawing: existing, invalidTransition: `Cannot request changes from status '${existing.status}'` };
+    }
+    const updated = await markDrawingRevised(existing.id);
+    if (!updated) {
+      const current = await getDrawingById(drawingId, firmId);
+      return { drawing: current!, invalidTransition: 'Could not mark drawing for revision' };
+    }
+    return { drawing: updated };
+  }
+
   // Should never reach here if Zod schema is enforced at the route level
   return { drawing: existing, invalidTransition: 'Unknown action' };
 }

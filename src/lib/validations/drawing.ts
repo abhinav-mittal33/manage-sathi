@@ -35,7 +35,7 @@ export const createDrawingSchema = z.object({
 export type CreateDrawingInput = z.infer<typeof createDrawingSchema>;
 
 export const updateDrawingSchema = z.object({
-  action: z.enum(['submit', 'revise']),
+  action: z.enum(['submit', 'revise', 'approve', 'request_changes']),
   notes: z.string().trim().max(1000).optional(),
   fileUrl: z.string().url().optional(),
 });

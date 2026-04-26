@@ -72,6 +72,8 @@ export function DrawingTypeCard({
   const [uploadOpen, setUploadOpen] = useState(false);
   const [resending, setResending] = useState(false);
   const [resendError, setResendError] = useState<string | null>(null);
+  const [approving, setApproving] = useState(false);
+  const [requestingChanges, setRequestingChanges] = useState(false);
 
   const [historyOpen, setHistoryOpen] = useState(false);
   const [historyLoading, setHistoryLoading] = useState(false);
@@ -121,6 +123,50 @@ export function DrawingTypeCard({
     } catch (err) {
       // Surface error in a simple alert — full error handling deferred to Phase 5
       alert(err instanceof Error ? err.message : 'Could not start revision.');
+    }
+  }
+
+  async function handleManualApprove() {
+    if (!drawing) return;
+    setApproving(true);
+    try {
+      const res = await fetch(`/api/v1/projects/${projectId}/drawings/${drawing.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'approve' }),
+      });
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        alert(body?.error?.message ?? 'Approval failed.');
+        return;
+      }
+      onRefresh();
+    } catch {
+      alert('Approval failed — check connection.');
+    } finally {
+      setApproving(false);
+    }
+  }
+
+  async function handleManualRequestChanges() {
+    if (!drawing) return;
+    setRequestingChanges(true);
+    try {
+      const res = await fetch(`/api/v1/projects/${projectId}/drawings/${drawing.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'request_changes' }),
+      });
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        alert(body?.error?.message ?? 'Failed to request changes.');
+        return;
+      }
+      onRefresh();
+    } catch {
+      alert('Request changes failed — check connection.');
+    } finally {
+      setRequestingChanges(false);
     }
   }
 
@@ -277,18 +323,30 @@ export function DrawingTypeCard({
 
             {status === 'submitted' && (
               <>
-                <Button
-                  variant="outline"
-                  className="min-h-[44px] w-full text-muted-foreground cursor-default"
-                  disabled
-                >
-                  Awaiting client approval
-                </Button>
+                <div className="flex gap-2">
+                  <Button
+                    className="min-h-[44px] flex-1 bg-[#8A9A7B] hover:bg-[#7a8a6b] text-white border-0 gap-1.5"
+                    onClick={handleManualApprove}
+                    disabled={approving || requestingChanges}
+                  >
+                    {approving ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
+                    Approve
+                  </Button>
+                  <Button
+                    variant="outline"
+                    className="min-h-[44px] flex-1 gap-1.5 border-amber-300 text-amber-700 hover:bg-amber-50"
+                    onClick={handleManualRequestChanges}
+                    disabled={approving || requestingChanges}
+                  >
+                    {requestingChanges ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
+                    Request Changes
+                  </Button>
+                </div>
                 <Button
                   variant="outline"
                   className="min-h-[44px] w-full gap-1.5 border-[#D1BFA7] text-[#2C2A26]"
                   onClick={handleResendWhatsApp}
-                  disabled={resending}
+                  disabled={resending || approving || requestingChanges}
                 >
                   {resending ? (
                     <Loader2 className="w-4 h-4 animate-spin" />
