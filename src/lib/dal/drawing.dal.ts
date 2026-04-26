@@ -192,7 +192,7 @@ export async function markDrawingSubmitted(
       and(
         eq(drawings.id, id),
         eq(drawings.firmId, firmId),
-        eq(drawings.status, 'not_started'),
+        inArray(drawings.status, ['not_started', 'revised']),
         isNull(drawings.deletedAt)
       )
     )

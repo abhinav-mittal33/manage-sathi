@@ -93,8 +93,8 @@ export async function updateDrawing(
   if (!existing || existing.projectId !== projectId) return null;
 
   if (input.action === 'submit') {
-    // Only allowed from 'not_started'
-    if (existing.status !== 'not_started') {
+    // Allowed from 'not_started' (first upload) or 'revised' (client requested changes, architect re-uploads)
+    if (existing.status !== 'not_started' && existing.status !== 'revised') {
       return { drawing: existing, invalidTransition: `Cannot submit from status '${existing.status}'` };
     }
 
