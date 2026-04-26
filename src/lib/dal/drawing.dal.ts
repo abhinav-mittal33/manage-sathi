@@ -339,15 +339,9 @@ export async function findPendingDrawingByClientPhone(
 
   if (byPhone) return byPhone.drawing;
 
-  // @lid JID fallback: most recent submitted drawing across all clients
-  const [byRecent] = await db
-    .select()
-    .from(drawings)
-    .where(and(eq(drawings.status, 'submitted'), isNull(drawings.deletedAt)))
-    .orderBy(desc(drawings.submittedAt))
-    .limit(1);
-
-  return byRecent ?? null;
+  // @lid JID fallback removed: returning null is safer than approving an arbitrary drawing
+  // when the sender's phone can't be matched. Architect can approve manually in the UI.
+  return null;
 }
 
 // Most recent drawing with actual activity (not 'not_started') for a project.

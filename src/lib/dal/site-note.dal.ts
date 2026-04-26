@@ -236,22 +236,9 @@ export async function findPendingApprovalByClientPhone(
 
   if (byPhone) return byPhone;
 
-  // WhatsApp @lid JIDs don't expose the phone number — fall back to the most recent
-  // pending approval across all clients (safe for single-firm pilot).
-  const [byRecent] = await db
-    .select(NOTE_COLUMNS)
-    .from(siteNotes)
-    .where(
-      and(
-        eq(siteNotes.noteType, 'approval_request'),
-        eq(siteNotes.approvalStatus, 'pending'),
-        isNull(siteNotes.deletedAt),
-      )
-    )
-    .orderBy(desc(siteNotes.capturedAt))
-    .limit(1);
-
-  return byRecent ?? null;
+  // @lid JID fallback removed: returning null is safer than approving an arbitrary note
+  // when the sender's phone can't be matched. Architect can approve manually in the UI.
+  return null;
 }
 
 // Legacy — used by personal note path (no client needed)

@@ -112,6 +112,9 @@ export async function sendApprovalRequest(
   }
 }
 
+// Throws on error — callers must handle.
+// For initial submissions use a try/catch that only logs.
+// For resend use a try/catch that surfaces the error to the UI.
 export async function sendDrawingForApproval(
   drawing: {
     id: string;
@@ -122,21 +125,23 @@ export async function sendDrawingForApproval(
   client: { name: string; phone: string },
   project: { id: string; name: string }
 ): Promise<void> {
-  try {
-    await callN8nWebhook(process.env.N8N_DRAWING_APPROVAL_WEBHOOK ?? '', {
-      drawingId: drawing.id,
-      projectId: project.id,
-      projectName: project.name,
-      drawingType: drawing.drawingType,
-      version: drawing.version,
-      fileUrl: drawing.fileUrl,
-      clientName: client.name,
-      clientPhone: client.phone,
-      appUrl: process.env.NEXT_PUBLIC_APP_URL,
-    });
-  } catch (err) {
-    console.error('[WhatsApp] sendDrawingForApproval failed:', err);
+  const webhookUrl = process.env.N8N_DRAWING_APPROVAL_WEBHOOK;
+  if (!webhookUrl) {
+    throw new Error(
+      'N8N_DRAWING_APPROVAL_WEBHOOK is not set in .env.local — drawing WhatsApp cannot be sent'
+    );
   }
+  await callN8nWebhook(webhookUrl, {
+    drawingId: drawing.id,
+    projectId: project.id,
+    projectName: project.name,
+    drawingType: drawing.drawingType,
+    version: drawing.version,
+    fileUrl: drawing.fileUrl,
+    clientName: client.name,
+    clientPhone: client.phone,
+    appUrl: process.env.NEXT_PUBLIC_APP_URL,
+  });
 }
 
 export async function sendInvoice(

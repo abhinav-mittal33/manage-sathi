@@ -199,8 +199,9 @@ export async function resendDrawingApproval(
     );
     return { sent: true };
   } catch (err) {
-    console.error('[Drawing] resendDrawingApproval WhatsApp call failed:', err);
-    return { sent: false, reason: 'WhatsApp notification failed — check n8n logs' };
+    const reason = err instanceof Error ? err.message : 'WhatsApp notification failed';
+    console.error('[Drawing] resendDrawingApproval failed:', err);
+    return { sent: false, reason };
   }
 }
 

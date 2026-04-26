@@ -2,7 +2,11 @@ import { SignJWT, jwtVerify } from 'jose';
 import { cookies } from 'next/headers';
 
 const COOKIE_NAME = process.env.AUTH_COOKIE_NAME ?? 'ms_session';
-const secret = new TextEncoder().encode(process.env.AUTH_SECRET ?? 'fallback-dev-secret-change-in-prod');
+
+if (!process.env.AUTH_SECRET) {
+  throw new Error('AUTH_SECRET environment variable is not set. Generate one with: openssl rand -hex 32');
+}
+const secret = new TextEncoder().encode(process.env.AUTH_SECRET);
 
 export interface AuthUser {
   userId: string;
