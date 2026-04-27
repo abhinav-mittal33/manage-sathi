@@ -10,6 +10,27 @@
 
 ---
 
+## Session 5 Work (2026-04-27) — Evolution API Signal session corruption
+
+### Evolution API Baileys Signal session corruption after 29+ hours uptime
+- **Symptom:** Client replies YES on WhatsApp, approval never updates. n8n `incomingWhatsAppReply1` stops executing. Evolution API logs: `Bad MAC` + `SessionError: No matching sessions found for message` for `81111094972487@lid`. Outbound messages still work fine.
+- **Cause:** Baileys (inside Evolution API) manages Signal protocol session keys in memory. WebSocket to WhatsApp keeps dropping (error 1006), each reconnect adds a new TLS listener without cleanup (`MaxListenersExceededWarning: 11 close listeners`). After enough drops, in-memory Signal session keys go out of sync with WhatsApp's server-side view → `Bad MAC` on every incoming message → Baileys silently drops the message → MESSAGES_UPSERT webhook never fires → n8n never runs.
+- **Fix:** `docker restart evolution-api`. Auth credentials (phone identity keys) survive restart via `evolution_data` volume (`DATABASE_ENABLED=false` = file-based auth at `/evolution/instances`). No QR re-scan needed. After restart, send one outbound WhatsApp message to the client to re-establish a fresh Signal session in both directions. `Bad MAC` / `@lid` errors disappear immediately.
+- **Prevention:** Add healthcheck to docker-compose `evolution` service:
+  ```yaml
+  healthcheck:
+    test: ["CMD-SHELL", "wget -q -O- --header='apikey: manage-sathi-evo-key' http://localhost:8080/instance/connectionState/manage-sathi | grep -q '\"state\":\"open\"'"]
+    interval: 60s
+    timeout: 10s
+    retries: 3
+    start_period: 30s
+  ```
+  This auto-restarts the container when WhatsApp connection is lost instead of silently dropping messages for hours.
+- **File:** `/tmp/manage-sathi-local/docker-compose.yml` (healthcheck already added)
+- **Distinguish from @lid privacy issue:** `Bad MAC` / `No matching sessions` = session corruption (fix: restart). `81111094972487@lid` returns no phone number in n8n Code node (fix: first-word matching + most-recent-pending fallback in app).
+
+---
+
 ## Session 3 Work (2026-04-25) — Evolution API migration + expression fixes
 
 ### WAHA Core tier cannot send images (sendImage / sendFile are Plus-only)
