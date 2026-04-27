@@ -10,6 +10,24 @@
 
 ---
 
+## Session 6 Work (2026-04-27) — Baileys companion-device de-registration
+
+### Evolution API stops receiving incoming messages after many restarts (silent — no errors)
+- **Symptom:** Outbound messages deliver fine (`PENDING` → `DELIVERY_ACK`), `connectionState` = `open`, but jay's YES replies generate ZERO log entries in Evolution API — `findMessages` store shows only outbound messages. n8n `incomingWhatsAppReply1` execution count frozen. Delivery receipt webhooks fire (MESSAGES_UPDATE), incoming reply webhooks don't (MESSAGES_UPSERT).
+- **Cause:** Multiple Evolution API restarts within 24-36 hours causes Baileys to upload fresh prekeys each time. WhatsApp servers progressively de-register the companion device (Evolution API) from the routing table. The WA WebSocket stays "open" (pings work) but WA servers stop forwarding incoming messages to this companion device. No error is logged because the messages never reach the Baileys layer.
+- **Fix (full resolution):**
+  1. `curl -X DELETE http://localhost:8080/instance/logout/manage-sathi -H "apikey: manage-sathi-evo-key"`
+  2. `curl -X DELETE http://localhost:8080/instance/delete/manage-sathi -H "apikey: manage-sathi-evo-key"`
+  3. Delete all session files: `docker run --rm -v manage-sathi-local_evolution_data:/data alpine find /data/manage-sathi -type f -delete`
+  4. Recreate: `curl -X POST http://localhost:8080/instance/create -H "apikey: manage-sathi-evo-key" -H "Content-Type: application/json" -d '{"instanceName":"manage-sathi","qrcode":true,...}'`
+  5. Instance reconnects automatically from existing `creds.json` (no QR scan needed if files were preserved — but if files deleted, QR scan IS needed)
+  6. Re-set webhook: `curl -X POST http://localhost:8080/webhook/set/manage-sathi ...`
+  7. Send one outbound message to the client to prime Signal session
+- **Prevention:** `WEBHOOK_GLOBAL_URL` env var in docker-compose ensures webhook survives restarts. Minimize restarts — use `docker restart` not `docker compose up -d` unless env changes are needed.
+- **Distinguish from short-term session corruption:** Short-term (`Bad MAC`, seen after single restart) → simple `docker restart`. Long-term (silent, no errors, multi-restart) → full instance delete + recreate.
+
+---
+
 ## Session 5 Work (2026-04-27) — Evolution API Signal session corruption
 
 ### Evolution API Baileys Signal session corruption after 29+ hours uptime
