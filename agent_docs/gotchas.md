@@ -10,6 +10,18 @@
 
 ---
 
+## Session 7 Work (2026-04-28) — Next.js webpack cache corruption
+
+### Drawing page returns 500 with `__webpack_modules__[moduleId] is not a function`
+- **Symptom:** `/api/v1/projects/[id]/drawings` (and/or its page) returns 500. Error in `.next/server/app/api/v1/projects/[id]/drawings/route.js`: `TypeError: __webpack_modules__[moduleId] is not a function`. The same code that was working before now fails.
+- **Cause:** Next.js dev server accumulates stale webpack cache in `.next/` across multiple sessions. Each `npm run dev` reuses cached module chunks; if any module was compiled against a previous version of a dependency or the file system diverged mid-compile, the cached chunk references a slot that no longer exists in the module map → the `is not a function` crash. NOT caused by our code changes (verified by git stash to original code — same error).
+- **Distinguish from real bugs:** Use `git stash` to original code and check if error still fires. If yes → cache corruption, not a code bug. If no → code introduced the error.
+- **Fix:** `rm -rf .next && npm run dev -- -p 3001`. Clears all webpack artifacts and forces a clean recompile. Takes ~30-60s on first compile.
+- **File:** `.next/` directory (delete it, never commit it)
+- **Prevention:** If dev server crashes or is killed mid-compile, always `rm -rf .next` before restarting. Add `.next` to `.gitignore` (already there).
+
+---
+
 ## Session 6 Work (2026-04-27) — Baileys companion-device de-registration
 
 ### Evolution API stops receiving incoming messages after many restarts (silent — no errors)
