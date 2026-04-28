@@ -1,5 +1,13 @@
 # Manage Sathi — मैनेज साथी
 
+![Status](https://img.shields.io/badge/status-MVP%20Complete-39d353?style=flat-square)
+![Next.js](https://img.shields.io/badge/Next.js-14-black?style=flat-square&logo=next.js&logoColor=white)
+![TypeScript](https://img.shields.io/badge/TypeScript-5.5-3178c6?style=flat-square&logo=typescript&logoColor=white)
+![PostgreSQL](https://img.shields.io/badge/PostgreSQL-Neon-336791?style=flat-square&logo=postgresql&logoColor=white)
+![Tailwind](https://img.shields.io/badge/Tailwind_CSS-v3-06B6D4?style=flat-square&logo=tailwindcss&logoColor=white)
+![WhatsApp](https://img.shields.io/badge/WhatsApp-n8n%20Integration-25D366?style=flat-square&logo=whatsapp&logoColor=white)
+![License](https://img.shields.io/badge/License-MIT-yellow?style=flat-square)
+
 > **Project management for Indian architecture firms.**  
 > Track drawings, site stages, notes, and invoices — all via WhatsApp.
 
